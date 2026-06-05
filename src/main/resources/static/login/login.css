@@ -1,0 +1,19 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f2f2f7; color: #1c1c1e; height: 100vh; display: flex; align-items: center; justify-content: center; }
+#card { background: white; padding: 40px; border-radius: 20px; width: 380px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+h1 { text-align: center; color: #1c1c1e; font-size: 24px; }
+#tabs { display: flex; gap: 8px; background: #f2f2f7; padding: 4px; border-radius: 10px; }
+.tab { flex: 1; padding: 8px; border: none; border-radius: 8px; background: transparent; color: #8e8e93; font-size: 15px; cursor: pointer; transition: all 0.2s; }
+.tab.active { background: white; color: #1c1c1e; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+input { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1.5px solid #e5e5ea; background: white; color: #1c1c1e; font-size: 15px; transition: border 0.2s; }
+input:focus { outline: none; border-color: #007aff; }
+#login-form, #register-form { display: flex; flex-direction: column; gap: 12px; }
+button { padding: 12px; border: none; border-radius: 10px; background: #007aff; color: white; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+button:hover { background: #0062cc; }
+#error { color: #ff3b30; font-size: 13px; text-align: center; min-height: 18px; }
+
+@media (max-width: 600px) {
+    body { align-items: flex-start; padding: 0; }
+    #container { width: 100%; height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    #card { width: 100%; max-width: 100%; border-radius: 16px; padding: 32px 24px; }
+}

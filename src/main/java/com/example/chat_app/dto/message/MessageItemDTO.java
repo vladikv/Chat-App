@@ -10,5 +10,5 @@ public class MessageItemDTO {
     private String content;
     private String senderUsername;
     private Long chatRoomId;
-    private LocalDateTime sendAt;
+    private LocalDateTime sentAt;
 }

@@ -46,7 +46,7 @@ public class MessageService {
         dto.setContent(message.getContent());
         dto.setSenderUsername(message.getSender().getUsername());
         dto.setChatRoomId(message.getChatRoom().getId());
-        dto.setSendAt(message.getSentAt());
+        dto.setSentAt(message.getSentAt());
         return dto;
     }
 }

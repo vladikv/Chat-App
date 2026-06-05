@@ -32,4 +32,12 @@ public class ChatController {
                 saved
         );
     }
+
+    @MessageMapping("/typing/{roomId}")
+    public void typing(@DestinationVariable Long roomId, Principal principal) {
+        messagingTemplate.convertAndSend(
+                "/topic/typing." + roomId,
+                principal.getName()
+        );
+    }
 }
