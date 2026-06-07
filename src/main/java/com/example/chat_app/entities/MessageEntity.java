@@ -26,4 +26,7 @@ public class MessageEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "chat_room_id", nullable = false)
     private ChatRoomEntity chatRoom;
+
+    @Column(name = "edited", columnDefinition = "boolean default false")
+    private boolean edited;
 }

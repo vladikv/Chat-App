@@ -11,29 +11,35 @@
 <body>
 <div id="app">
 
-    <!-- Сайдбар -->
+    <!-- Left Sidebar -->
     <div id="sidebar">
         <div id="sidebar-header">
             <span>💬 Chat App</span>
-            <button id="logout-btn" onclick="logout()">↩</button>
         </div>
-        <div id="user-info"></div>
         <div id="rooms-header">
             <span>Rooms</span>
             <button id="add-room-btn" onclick="toggleNewRoom()">+</button>
         </div>
         <div id="new-room" style="display:none">
-            <input id="room-input" type="text" placeholder="Room name..."/>
-            <button onclick="createRoom()">Create</button>
+            <input id="room-input" type="text" placeholder="New room name..." onkeydown="if(event.key==='Enter') createRoom()"/>
         </div>
         <div id="rooms-list"></div>
+
+        <!-- Bottom user panel -->
+        <div id="user-panel">
+            <div id="profile-btn" onclick="window.location.href='/profile/profile.html'"></div>
+            <span id="username-label"></span>
+            <button id="theme-btn" onclick="toggleTheme()">🌙</button>
+            <button id="logout-btn" onclick="logout()">Log out</button>
+        </div>
     </div>
 
-    <!-- Чат -->
+    <!-- Main Chat -->
     <div id="main">
         <div id="header">
-            <button id="back-btn" onclick="showSidebar()">‹</button>
+            <button id="toggle-sidebar-btn" onclick="toggleLeftSidebar()">☰</button>
             <span id="room-title">Select a room</span>
+            <button id="members-btn" onclick="toggleRightSidebar()">👥</button>
         </div>
         <div id="status">Connecting...</div>
         <div id="chat"></div>
@@ -46,7 +52,28 @@
         </div>
     </div>
 
+    <!-- Right Sidebar -->
+    <div id="right-sidebar" class="hidden">
+        <div id="right-sidebar-header">
+            <span>Members</span>
+            <button onclick="toggleRightSidebar()">✕</button>
+        </div>
+        <div id="online-section">
+            <div class="members-label">ONLINE</div>
+            <div id="online-list"></div>
+        </div>
+        <div id="offline-section">
+            <div class="members-label">OFFLINE</div>
+            <div id="offline-list"></div>
+            <div id="offline-more"></div>
+        </div>
+    </div>
+
 </div>
 <script src="/app.js"></script>
+<div id="context-menu">
+    <div class="context-item" id="ctx-edit" onclick="contextEdit()">✏️ Edit</div>
+    <div class="context-item danger" id="ctx-delete" onclick="contextDelete()">🗑 Delete</div>
+</div>
 </body>
 </html>

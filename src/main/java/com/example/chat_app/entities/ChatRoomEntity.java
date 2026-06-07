@@ -22,4 +22,8 @@ public class ChatRoomEntity {
 
     @OneToMany(mappedBy = "chatRoom", fetch = FetchType.LAZY)
     private List<MessageEntity> messages;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by")
+    private UserEntity createdBy;
 }

@@ -24,4 +24,10 @@ public class UserEntity {
 
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column
+    private String displayUsername;
+
+    @Column
+    private String avatarColor;
 }

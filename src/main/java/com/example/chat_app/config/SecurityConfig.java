@@ -28,6 +28,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/account/register", "/api/account/login").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/", "/index.html", "/login/**", "/*.js", "/*.css").permitAll()
+                        .requestMatchers("/", "/index.html", "/login/**", "/profile/**", "/*.js", "/*.css").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 

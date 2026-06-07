@@ -8,4 +8,5 @@ public class ChatRoomItemDTO {
     private Long id;
     private String name;
     private LocalDateTime createdAt;
+    private String createdBy;
 }

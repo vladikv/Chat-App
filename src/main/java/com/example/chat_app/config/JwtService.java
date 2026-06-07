@@ -1,5 +1,5 @@
 package com.example.chat_app.config;
-
+import org.springframework.beans.factory.annotation.Value;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -12,7 +12,8 @@ import java.util.Date;
 @Service
 public class JwtService {
 
-    private static final String SECRET_KEY = "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970";
+    @Value("${app.jwt.secret}")
+    private String SECRET_KEY;
     private static final long EXPIRATION_TIME = 86400000; // 24 години в мілісекундах
 
     public String generateToken(String username) {
@@ -33,6 +34,7 @@ public class JwtService {
             extractClaims(token);
             return true;
         } catch (Exception e) {
+            System.out.println("Token validation failed: " + e.getMessage());
             return false;
         }
     }

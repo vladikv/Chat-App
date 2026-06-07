@@ -2,6 +2,7 @@ package com.example.chat_app.controllers;
 
 import com.example.chat_app.dto.message.MessageItemDTO;
 import com.example.chat_app.dto.message.MessageSendDTO;
+import com.example.chat_app.dto.message.MessageUpdateDTO;
 import com.example.chat_app.services.MessageService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,5 +30,23 @@ public class MessageController {
     @GetMapping("/{roomId}/messages")
     public ResponseEntity<List<MessageItemDTO>> getByRoom(@PathVariable Long roomId) {
         return ResponseEntity.ok(messageService.getByRoom(roomId));
+    }
+
+    @DeleteMapping("/{roomId}/messages/{messageId}")
+    public ResponseEntity<Void> delete(
+            @PathVariable Long roomId,
+            @PathVariable Long messageId,
+            Principal principal) {
+        messageService.delete(messageId, principal.getName());
+        return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/{roomId}/messages/{messageId}")
+    public ResponseEntity<MessageItemDTO> update(
+            @PathVariable Long roomId,
+            @PathVariable Long messageId,
+            @Valid @RequestBody MessageUpdateDTO dto,
+            Principal principal) {
+        return ResponseEntity.ok(messageService.update(messageId, dto, principal.getName()));
     }
 }

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile</title>
+    <link rel="stylesheet" href="/profile/profile.css">
+</head>
+<body>
+<div id="container">
+    <div id="card">
+        <button id="back-btn" onclick="window.location.href='/'">‹ Back</button>
+
+        <div id="avatar"></div>
+        <h2 id="display-username"></h2>
+        <p id="display-email"></p>
+
+        <div class="divider"></div>
+
+        <div id="error"></div>
+        <div id="success"></div>
+
+        <div class="section">
+            <label>Username</label>
+            <input id="username" type="text"/>
+        </div>
+
+        <div class="section">
+            <label>Email</label>
+            <input id="email" type="email"/>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section">
+            <label>Current Password</label>
+            <input id="current-password" type="password" placeholder="Enter to change password"/>
+        </div>
+
+        <div class="section">
+            <label>New Password</label>
+            <input id="new-password" type="password" placeholder="Min 6 characters"/>
+        </div>
+
+        <button id="save-btn" onclick="save()">Save Changes</button>
+    </div>
+</div>
+<script src="/profile/profile.js"></script>
+</body>
+</html>
