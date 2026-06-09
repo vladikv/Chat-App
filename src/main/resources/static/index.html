@@ -16,14 +16,28 @@
         <div id="sidebar-header">
             <span>💬 Chat App</span>
         </div>
-        <div id="rooms-header">
-            <span>Rooms</span>
-            <button id="add-room-btn" onclick="toggleNewRoom()">+</button>
+        <!-- Tabs -->
+        <div id="tabs">
+            <button class="tab-btn active" onclick="switchTab('rooms')"># Rooms</button>
+            <button class="tab-btn" onclick="switchTab('dms')">✉️ DMs</button>
         </div>
-        <div id="new-room" style="display:none">
-            <input id="room-input" type="text" placeholder="New room name..." onkeydown="if(event.key==='Enter') createRoom()"/>
+
+        <!-- Rooms Tab -->
+        <div id="tab-rooms">
+            <div id="rooms-header">
+                <span>Rooms</span>
+                <button id="add-room-btn" onclick="toggleNewRoom()">+</button>
+            </div>
+            <div id="new-room" style="display:none">
+                <input id="room-input" type="text" placeholder="New room name..." onkeydown="if(event.key==='Enter') createRoom()"/>
+            </div>
+            <div id="rooms-list"></div>
         </div>
-        <div id="rooms-list"></div>
+
+        <!-- DMs Tab -->
+        <div id="tab-dms" style="display:none">
+            <div id="dm-list"></div>
+        </div>
 
         <!-- Bottom user panel -->
         <div id="user-panel">
@@ -41,7 +55,6 @@
             <span id="room-title">Select a room</span>
             <button id="members-btn" onclick="toggleRightSidebar()">👥</button>
         </div>
-        <div id="status">Connecting...</div>
         <div id="chat"></div>
         <div id="typing-indicator"></div>
         <div id="bottom" style="display:none">
@@ -72,8 +85,20 @@
 </div>
 <script src="/app.js"></script>
 <div id="context-menu">
+<!--    <div class="context-item" id="ctx-react-thumb" onclick="addReaction('👍')">👍</div>-->
+<!--    <div class="context-item" id="ctx-react-heart" onclick="addReaction('❤️')">❤️</div>-->
+<!--    <div class="context-item" id="ctx-react-laugh" onclick="addReaction('😂')">😂</div>-->
     <div class="context-item" id="ctx-edit" onclick="contextEdit()">✏️ Edit</div>
     <div class="context-item danger" id="ctx-delete" onclick="contextDelete()">🗑 Delete</div>
+</div>
+
+<div id="emoji-picker">
+    <span onclick="addReaction('👍')">👍</span>
+    <span onclick="addReaction('❤️')">❤️</span>
+    <span onclick="addReaction('😂')">😂</span>
+    <span onclick="addReaction('😮')">😮</span>
+    <span onclick="addReaction('😢')">😢</span>
+    <span onclick="addReaction('🔥')">🔥</span>
 </div>
 </body>
 </html>

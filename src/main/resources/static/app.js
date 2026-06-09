@@ -19,13 +19,16 @@ let currentTypingSubscription = null;
 let contextMessageId = null;
 let contextOriginalContent = null;
 
+let currentDMUser = null;
+let currentDMSubscription = null;
+
 const socket = new SockJS(BASE_URL + '/ws');
 const stompClient = Stomp.over(socket);
 stompClient.debug = null;
 
 stompClient.connect({ Authorization: 'Bearer ' + getToken() }, function () {
-    document.getElementById('status').textContent = '🟢 Connected';
     loadRooms();
+    loadDMList();
 
     // Set avatar and username
     const btn = document.getElementById('profile-btn');
@@ -201,16 +204,19 @@ function openRoom(roomId, roomName, el) {
 function send() {
     const input = document.getElementById('input');
     const text = input.value.trim();
-    if (!text || !currentRoomId) return;
+    if (!text) return;
 
     const editingId = input.dataset.editingId;
 
     if (editingId) {
-        // Send edit via WebSocket
         stompClient.send(`/app/chat.edit/${currentRoomId}/${editingId}`, {},
             JSON.stringify({ content: text }));
         cancelEdit();
-    } else {
+    } else if (currentDMUser) {
+        // Send DM
+        stompClient.send(`/app/dm.send/${currentDMUser}`, {},
+            JSON.stringify({ content: text }));
+    } else if (currentRoomId) {
         stompClient.send(`/app/chat.send/${currentRoomId}`, {},
             JSON.stringify({ content: text }));
     }
@@ -240,57 +246,82 @@ function deleteMessage(messageId) {
         }
     });
 }
+
 function addMessage(msg) {
+    console.log('Received message:', msg);
+
     if (msg.deletedId) {
         const el = document.getElementById('msg-' + msg.deletedId);
         if (el) el.remove();
         return;
     }
 
+    const chat = document.getElementById('chat');
+    const isMe = msg.senderUsername === ME;  // ← має бути ТУТ перед усім
+    const color = getUserColor(msg.senderUsername);
+    const reactionsHTML = buildReactionsHTML(msg);
+
     // Update existing message if edited
     const existing = document.getElementById('msg-' + msg.id);
     if (existing) {
         const bubble = existing.querySelector('.bubble');
         bubble.innerHTML = `
-            ${msg.content}
-            ${msg.edited ? '<span class="edited-label">edited</span>' : ''}
-        `;
+        ${msg.content}
+        ${msg.edited ? '<span class="edited-label">edited</span>' : ''}
+    `;
+
+        // Remove old reactions
+        const oldReactions = existing.querySelector('.reactions');
+        if (oldReactions) oldReactions.remove();
+
+        // Add new reactions before time
+        const reactionsHTML = buildReactionsHTML(msg);
+        if (reactionsHTML) {
+            existing.querySelector('.time').insertAdjacentHTML(
+                'beforebegin',
+                `<div class="reactions">${reactionsHTML}</div>`
+            );
+        }
         return;
     }
 
-    const chat = document.getElementById('chat');
-    const isMe = msg.senderUsername === ME;
-    const color = getUserColor(msg.senderUsername);
     const div = document.createElement('div');
     div.className = 'message ' + (isMe ? 'mine' : 'other');
     div.id = 'msg-' + msg.id;
+
     div.innerHTML = `
         <div class="sender" style="color: ${isMe ? '#8e8e93' : color}">${msg.senderUsername}</div>
         <div class="bubble">
             ${msg.content}
             ${msg.edited ? '<span class="edited-label">edited</span>' : ''}
         </div>
+        ${reactionsHTML ? `<div class="reactions">${reactionsHTML}</div>` : ''}
+        ${!isMe ? `
+        <div class="msg-actions">
+            <button class="msg-action-btn" onclick="quickReact(${msg.id}, '👍')">👍</button>
+            <button class="msg-action-btn" onclick="quickReact(${msg.id}, '❤️')">❤️</button>
+            <button class="msg-action-btn" onclick="quickReact(${msg.id}, '😂')">😂</button>
+            <button class="msg-action-btn" onclick="openEmojiForMsg(${msg.id})">➕</button>
+        </div>` : ''}
         <div class="time">${new Date(msg.sentAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
     `;
 
-    // Context menu
-    if (isMe) {
-        div.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            showContextMenu(e.clientX, e.clientY, msg.id, msg.content, true);
-        });
+    div.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (isMe) {
+            showContextMenu(e.clientX, e.clientY, msg.id, msg.content, isMe);
+        }
+    });
 
-        // Long press for mobile
-        let pressTimer;
-        div.addEventListener('touchstart', () => {
-            pressTimer = setTimeout(() => {
-                const rect = div.getBoundingClientRect();
-                showContextMenu(rect.left + rect.width / 2, rect.top, msg.id, msg.content, true);
-            }, 500);
-        });
-        div.addEventListener('touchend', () => clearTimeout(pressTimer));
-        div.addEventListener('touchmove', () => clearTimeout(pressTimer));
-    }
+    let pressTimer;
+    div.addEventListener('touchstart', () => {
+        pressTimer = setTimeout(() => {
+            const rect = div.getBoundingClientRect();
+            showContextMenu(rect.left + rect.width / 2, rect.top, msg.id, msg.content, isMe);
+        }, 500);
+    });
+    div.addEventListener('touchend', () => clearTimeout(pressTimer));
+    div.addEventListener('touchmove', () => clearTimeout(pressTimer));
 
     chat.appendChild(div);
     chat.scrollTop = chat.scrollHeight;
@@ -376,12 +407,14 @@ function showContextMenu(x, y, messageId, content, isMe) {
     const menu = document.getElementById('context-menu');
     document.getElementById('ctx-edit').style.display = isMe ? 'flex' : 'none';
     document.getElementById('ctx-delete').style.display = isMe ? 'flex' : 'none';
+    document.getElementById('ctx-react-thumb').style.display = isMe ? 'none' : 'flex';
+    document.getElementById('ctx-react-heart').style.display = isMe ? 'none' : 'flex';
+    document.getElementById('ctx-react-laugh').style.display = isMe ? 'none' : 'flex';
 
     menu.classList.add('visible');
 
-    // Position menu within viewport
     const menuWidth = 160;
-    const menuHeight = 100;
+    const menuHeight = 150;
     const left = Math.min(x, window.innerWidth - menuWidth - 10);
     const top = Math.min(y, window.innerHeight - menuHeight - 10);
 
@@ -444,4 +477,150 @@ if (savedTheme === 'dark') {
     document.body.classList.add('dark');
     const btn = document.getElementById('theme-btn');
     if (btn) btn.textContent = '☀️';
+}
+
+function loadDMList() {
+    fetch(BASE_URL + '/api/users', {
+        headers: { Authorization: 'Bearer ' + getToken() }
+    })
+        .then(r => r.json())
+        .then(users => {
+            const list = document.getElementById('dm-list');
+            list.innerHTML = users
+                .filter(u => u.username !== ME)
+                .map(u => `
+                <div class="dm-item" id="dm-${u.username}" onclick="openDM('${u.username}')">
+                    <div class="dm-avatar" style="background:${getUserColor(u.username)}">${u.username.charAt(0).toUpperCase()}</div>
+                    ${u.username}
+                </div>
+            `).join('');
+        });
+}
+
+function openDM(username) {
+    // Deactivate rooms
+    document.querySelectorAll('.room-item').forEach(r => r.classList.remove('active'));
+    document.querySelectorAll('.dm-item').forEach(d => d.classList.remove('active'));
+    document.getElementById('dm-' + username)?.classList.add('active');
+
+    document.getElementById('room-title').textContent = '👤 ' + username;
+    document.getElementById('bottom').style.display = 'flex';
+    document.getElementById('chat').innerHTML = '';
+    document.getElementById('typing-indicator').innerHTML = '';
+
+    if (currentSubscription) currentSubscription.unsubscribe();
+    if (currentTypingSubscription) currentTypingSubscription.unsubscribe();
+    if (currentDMSubscription) currentDMSubscription.unsubscribe();
+
+    currentRoomId = null;
+    currentDMUser = username;
+
+    // Load history
+    fetch(BASE_URL + `/api/dm/${username}`, {
+        headers: { Authorization: 'Bearer ' + getToken() }
+    })
+        .then(r => r.json())
+        .then(messages => messages.forEach(addDMMessage));
+
+    // Subscribe to DM topic
+    currentDMSubscription = stompClient.subscribe(`/topic/dm.${ME}`, function(msg) {
+        const data = JSON.parse(msg.body);
+        if (data.senderUsername === username || data.receiverUsername === username) {
+            addDMMessage(data);
+        }
+    });
+
+    if (window.innerWidth <= 600) {
+        document.getElementById('sidebar').classList.add('hidden');
+    }
+}
+
+function addDMMessage(msg) {
+    const chat = document.getElementById('chat');
+    const isMe = msg.senderUsername === ME;
+    const color = getUserColor(msg.senderUsername);
+    const div = document.createElement('div');
+    div.className = 'message ' + (isMe ? 'mine' : 'other');
+    div.id = 'dm-msg-' + msg.id;
+    div.innerHTML = `
+        <div class="sender" style="color: ${isMe ? '#8e8e93' : color}">${msg.senderUsername}</div>
+        <div class="bubble">${msg.content}</div>
+        <div class="time">${new Date(msg.sentAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+    `;
+
+    if (isMe) {
+        div.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            showContextMenu(e.clientX, e.clientY, msg.id, msg.content, true);
+        });
+        let pressTimer;
+        div.addEventListener('touchstart', () => {
+            pressTimer = setTimeout(() => {
+                const rect = div.getBoundingClientRect();
+                showContextMenu(rect.left + rect.width / 2, rect.top, msg.id, msg.content, true);
+            }, 500);
+        });
+        div.addEventListener('touchend', () => clearTimeout(pressTimer));
+        div.addEventListener('touchmove', () => clearTimeout(pressTimer));
+    }
+
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-rooms').style.display = tab === 'rooms' ? 'flex' : 'none';
+    document.getElementById('tab-dms').style.display = tab === 'dms' ? 'block' : 'none';
+    event.target.classList.add('active');
+}
+
+function showEmojiPicker() {
+    const menu = document.getElementById('context-menu');
+    const picker = document.getElementById('emoji-picker');
+    picker.classList.add('visible');
+    picker.style.left = menu.style.left;
+    picker.style.top = (parseInt(menu.style.top) + 50) + 'px';
+    hideContextMenu();
+}
+
+function addReaction(emoji) {
+    document.getElementById('emoji-picker').classList.remove('visible');
+    if (!contextMessageId) return;
+    console.log('Reacting:', contextMessageId, emoji, currentRoomId);
+    stompClient.send(`/app/chat.react/${currentRoomId}/${contextMessageId}`, {},
+        JSON.stringify({ emoji }));
+}
+
+// Close emoji picker on click outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('#emoji-picker')) {
+        document.getElementById('emoji-picker').classList.remove('visible');
+    }
+});
+
+function quickReact(messageId, emoji) {
+    if (!currentRoomId) return;
+    contextMessageId = messageId;
+    stompClient.send(`/app/chat.react/${currentRoomId}/${messageId}`, {},
+        JSON.stringify({ emoji }));
+}
+
+function buildReactionsHTML(msg) {
+    console.log('Building reactions:', msg.reactions);
+    if (!msg.reactions || Object.keys(msg.reactions).length === 0) return '';
+    return Object.entries(msg.reactions).map(([emoji, users]) => `
+        <div class="reaction-badge ${users.includes(ME) ? 'mine' : ''}" 
+             onclick="quickReact(${msg.id}, '${emoji}')">
+            ${emoji} ${users.length}
+        </div>
+    `).join('');
+}
+
+function openEmojiForMsg(messageId) {
+    contextMessageId = messageId;
+    const picker = document.getElementById('emoji-picker');
+    picker.classList.add('visible');
+    picker.style.left = (window.innerWidth / 2 - 100) + 'px';
+    picker.style.top = (window.innerHeight / 2) + 'px';
 }

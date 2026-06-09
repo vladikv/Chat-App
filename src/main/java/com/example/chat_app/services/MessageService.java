@@ -5,13 +5,19 @@ import com.example.chat_app.dto.message.MessageSendDTO;
 import com.example.chat_app.dto.message.MessageUpdateDTO;
 import com.example.chat_app.entities.ChatRoomEntity;
 import com.example.chat_app.entities.MessageEntity;
+import com.example.chat_app.entities.ReactionEntity;
 import com.example.chat_app.entities.UserEntity;
 import com.example.chat_app.repositories.MessageRepository;
+import com.example.chat_app.repositories.ReactionRepository;
+import com.example.chat_app.repositories.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -21,6 +27,55 @@ public class MessageService {
     private final MessageRepository messageRepository;
     private final ChatRoomService chatRoomService;
     private final UserService userService;
+    private final ReactionRepository reactionRepository;
+    private final UserRepository userRepository;
+
+    private MessageItemDTO toDTO(MessageEntity message) {
+        MessageItemDTO dto = new MessageItemDTO();
+        dto.setId(message.getId());
+        dto.setContent(message.getContent());
+        dto.setSenderUsername(message.getSender().getUsername());
+        dto.setChatRoomId(message.getChatRoom().getId());
+        dto.setSentAt(message.getSentAt());
+        dto.setEdited(message.isEdited());
+
+        // Group reactions by emoji
+        Map<String, List<String>> reactions = new HashMap<>();
+        reactionRepository.findByMessageId(message.getId()).forEach(r -> {
+            reactions.computeIfAbsent(r.getEmoji(), k -> new ArrayList<>())
+                    .add(r.getUser().getUsername());
+        });
+        dto.setReactions(reactions);
+
+        return dto;
+    }
+
+    @Transactional
+    public MessageItemDTO react(Long messageId, String emoji, String username) {
+
+        MessageEntity message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("Message not found"));
+
+        List<ReactionEntity> existing = reactionRepository
+                .findByMessageIdAndUserUsername(messageId, username);
+
+        if (!existing.isEmpty() && existing.get(0).getEmoji().equals(emoji)) {
+            reactionRepository.deleteAll(existing);
+        } else {
+            reactionRepository.deleteAll(existing);
+            UserEntity user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            ReactionEntity reaction = new ReactionEntity();
+            reaction.setEmoji(emoji);
+            reaction.setUser(user);
+            reaction.setMessage(message);
+            reactionRepository.save(reaction);
+        }
+
+        reactionRepository.flush();
+        return toDTO(messageRepository.findById(messageId).get());
+    }
 
     public MessageItemDTO send(MessageSendDTO dto, Long roomId, String username) {
         ChatRoomEntity room = chatRoomService.findById(roomId);
@@ -42,16 +97,7 @@ public class MessageService {
                 .collect(Collectors.toList());
     }
 
-    private MessageItemDTO toDTO(MessageEntity message) {
-        MessageItemDTO dto = new MessageItemDTO();
-        dto.setId(message.getId());
-        dto.setContent(message.getContent());
-        dto.setSenderUsername(message.getSender().getUsername());
-        dto.setChatRoomId(message.getChatRoom().getId());
-        dto.setSentAt(message.getSentAt());
-        dto.setEdited(message.isEdited());
-        return dto;
-    }
+
 
     @Transactional
     public void delete(Long messageId, String username) {

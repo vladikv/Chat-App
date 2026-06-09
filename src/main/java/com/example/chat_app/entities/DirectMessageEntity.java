@@ -3,13 +3,11 @@ package com.example.chat_app.entities;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 @Data
 @Entity
-@Table(name = "messages")
-public class MessageEntity {
+@Table(name = "direct_messages")
+public class DirectMessageEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -25,13 +23,10 @@ public class MessageEntity {
     private boolean edited;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "sender_id", nullable = false)
     private UserEntity sender;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "chat_room_id", nullable = false)
-    private ChatRoomEntity chatRoom;
-
-    @OneToMany(mappedBy = "message", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    private List<ReactionEntity> reactions = new ArrayList<>();
+    @JoinColumn(name = "receiver_id", nullable = false)
+    private UserEntity receiver;
 }
