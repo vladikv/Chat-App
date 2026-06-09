@@ -7,6 +7,33 @@ function getToken() {
     return TOKEN;
 }
 
+async function fetchWithAuth(url, options = {}) {
+    options.headers = { ...options.headers, Authorization: 'Bearer ' + getToken() };
+    let res = await fetch(url, options);
+
+    if (res.status === 401) {
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (!refreshToken) { logout(); return res; }
+
+        const refreshRes = await fetch(BASE_URL + '/api/account/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken })
+        });
+
+        if (!refreshRes.ok) { logout(); return res; }
+
+        const data = await refreshRes.json();
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('refreshToken', data.refreshToken);
+
+        // Retry original request with new token
+        options.headers.Authorization = 'Bearer ' + data.token;
+        res = await fetch(url, options);
+    }
+    return res;
+}
+
 if (!TOKEN) window.location.href = '/login/login.html';
 
 const userInfo = document.getElementById('user-info');
@@ -45,15 +72,21 @@ stompClient.connect({ Authorization: 'Bearer ' + getToken() }, function () {
     });
 
     setTimeout(() => {
-        fetch(BASE_URL + '/api/online-users', {
-            headers: { Authorization: 'Bearer ' + getToken() }
-        })
+        fetchWithAuth(BASE_URL + '/api/online-users')
             .then(r => r.json())
             .then(users => updateOnlineUsers(users));
     }, 500);
 });
 
 function logout() {
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (refreshToken) {
+        fetch(BASE_URL + '/api/account/logout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken })
+        });
+    }
     localStorage.clear();
     window.location.href = '/login/login.html';
 }
@@ -74,9 +107,7 @@ function toggleRightSidebar() {
 
 
 async function loadRooms() {
-    const res = await fetch(BASE_URL + '/api/rooms', {
-        headers: { Authorization: 'Bearer ' + getToken() }
-    });
+    const res = await fetchWithAuth(BASE_URL + '/api/rooms')
     const rooms = await res.json();
     const list = document.getElementById('rooms-list');
     list.innerHTML = '';
@@ -120,12 +151,9 @@ async function saveRename(roomId, input) {
     const newName = input.value.trim();
     if (!newName) return;
 
-    const res = await fetch(BASE_URL + `/api/rooms/${roomId}`, {
+    const res = await fetchWithAuth(BASE_URL + `/api/rooms/${roomId}`, {
         method: 'PUT',
-        headers: {
-            Authorization: 'Bearer ' + getToken(),
-            'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName })
     });
 
@@ -150,9 +178,9 @@ async function createRoom() {
     const name = input.value.trim();
     if (!name) return;
 
-    await fetch(BASE_URL + '/api/rooms', {
+    await fetchWithAuth(BASE_URL + '/api/rooms', {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name })
     });
 
@@ -179,9 +207,7 @@ function openRoom(roomId, roomName, el) {
 
     currentRoomId = roomId;
 
-    fetch(BASE_URL + `/api/rooms/${roomId}/messages`, {
-        headers: { Authorization: 'Bearer ' + getToken() }
-    })
+    fetchWithAuth(BASE_URL + `/api/rooms/${roomId}/messages`)
         .then(r => {
             if (!r.ok) {
                 console.error('Failed to load messages:', r.status);
@@ -234,10 +260,8 @@ function getUserColor(username) {
 }
 
 function deleteMessage(messageId) {
-    fetch(BASE_URL + `/api/rooms/${currentRoomId}/messages/${messageId}`, {
-        method: 'DELETE',
-        headers: { Authorization: 'Bearer ' + getToken() }
-    }).then(res => {
+    fetchWithAuth(BASE_URL + `/api/rooms/${currentRoomId}/messages/${messageId}`, { method: 'DELETE' })
+        .then(res => {
         if (res.ok) {
             const el = document.getElementById('msg-' + messageId);
             if (el) el.remove();
@@ -314,14 +338,17 @@ function addMessage(msg) {
     });
 
     let pressTimer;
-    div.addEventListener('touchstart', () => {
+    let touchMoved = false;
+    div.addEventListener('touchstart', (e) => {
+        touchMoved = false;
         pressTimer = setTimeout(() => {
-            const rect = div.getBoundingClientRect();
-            showContextMenu(rect.left + rect.width / 2, rect.top, msg.id, msg.content, isMe);
+            if (touchMoved) return;
+            const touch = e.touches[0];
+            showContextMenu(touch.clientX, touch.clientY, msg.id, msg.content, isMe);
         }, 500);
     });
     div.addEventListener('touchend', () => clearTimeout(pressTimer));
-    div.addEventListener('touchmove', () => clearTimeout(pressTimer));
+    div.addEventListener('touchmove', () => { touchMoved = true; clearTimeout(pressTimer); });
 
     chat.appendChild(div);
     chat.scrollTop = chat.scrollHeight;
@@ -335,9 +362,7 @@ const OFFLINE_LIMIT = 10;
 let showAllOffline = false;
 
 async function loadUsers() {
-    const res = await fetch(BASE_URL + '/api/users', {
-        headers: { Authorization: 'Bearer ' + getToken() }
-    });
+    const res = await fetchWithAuth(BASE_URL + '/api/users')
     const users = await res.json();
 
     const online = users.filter(u => u.online && u.username !== ME);
@@ -438,7 +463,6 @@ function contextEdit() {
 
     const input = document.getElementById('input');
     input.value = contextOriginalContent;
-    input.focus();
     input.dataset.editingId = contextMessageId;
 
     // Show editing indicator
@@ -450,6 +474,13 @@ function contextEdit() {
     `;
 
     hideContextMenu();
+
+    // Delay focus so menu closes first (important on mobile)
+    setTimeout(() => {
+        input.focus();
+        // Move cursor to end
+        input.selectionStart = input.selectionEnd = input.value.length;
+    }, 100);
 }
 
 function cancelEdit() {
@@ -460,9 +491,14 @@ function cancelEdit() {
 }
 
 // Close menu on click outside
-document.addEventListener('click', hideContextMenu);
-document.addEventListener('touchstart', (e) => {
+document.addEventListener('click', (e) => {
     if (!e.target.closest('#context-menu')) hideContextMenu();
+});
+document.addEventListener('touchend', (e) => {
+    // Use touchend (not touchstart) so menu buttons have time to fire their click
+    if (!e.target.closest('#context-menu')) {
+        setTimeout(() => hideContextMenu(), 50);
+    }
 });
 
 function toggleTheme() {
@@ -480,9 +516,7 @@ if (savedTheme === 'dark') {
 }
 
 function loadDMList() {
-    fetch(BASE_URL + '/api/users', {
-        headers: { Authorization: 'Bearer ' + getToken() }
-    })
+    fetchWithAuth(BASE_URL + '/api/users')
         .then(r => r.json())
         .then(users => {
             const list = document.getElementById('dm-list');
@@ -516,9 +550,7 @@ function openDM(username) {
     currentDMUser = username;
 
     // Load history
-    fetch(BASE_URL + `/api/dm/${username}`, {
-        headers: { Authorization: 'Bearer ' + getToken() }
-    })
+    fetchWithAuth(BASE_URL + `/api/dm/${username}`)
         .then(r => r.json())
         .then(messages => messages.forEach(addDMMessage));
 
@@ -554,14 +586,17 @@ function addDMMessage(msg) {
             showContextMenu(e.clientX, e.clientY, msg.id, msg.content, true);
         });
         let pressTimer;
-        div.addEventListener('touchstart', () => {
+        let touchMoved = false;
+        div.addEventListener('touchstart', (e) => {
+            touchMoved = false;
             pressTimer = setTimeout(() => {
-                const rect = div.getBoundingClientRect();
-                showContextMenu(rect.left + rect.width / 2, rect.top, msg.id, msg.content, true);
+                if (touchMoved) return;
+                const touch = e.touches[0];
+                showContextMenu(touch.clientX, touch.clientY, msg.id, msg.content, true);
             }, 500);
         });
         div.addEventListener('touchend', () => clearTimeout(pressTimer));
-        div.addEventListener('touchmove', () => clearTimeout(pressTimer));
+        div.addEventListener('touchmove', () => { touchMoved = true; clearTimeout(pressTimer); });
     }
 
     chat.appendChild(div);

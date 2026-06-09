@@ -20,6 +20,7 @@ public class WebSocketEventListener {
     @EventListener
     public void handleConnect(SessionConnectedEvent event) {
         Principal user = event.getUser();
+        System.out.println("WS Connect: user=" + (user != null ? user.getName() : "NULL"));
         if (user != null) {
             onlineUserService.addUser(user.getName());
             broadcastOnlineUsers();

@@ -223,4 +223,8 @@ body.dark #theme-btn:hover { background: #3a3a3c; }
     #right-sidebar { position: absolute; top: 0; right: 0; height: 100dvh; z-index: 10; transition: transform 0.3s ease; width: 100% !important; min-width: 100% !important; }
     #right-sidebar.hidden { transform: translateX(100%); width: 100% !important; }
     #members-btn { display: flex !important; }
+
+    /* Larger tap targets for context menu on mobile */
+    #context-menu { min-width: 200px; padding: 8px; }
+    .context-item { padding: 14px 16px; font-size: 16px; gap: 12px; }
 }

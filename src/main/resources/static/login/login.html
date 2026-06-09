@@ -9,7 +9,13 @@
 <body>
 <div id="container">
     <div id="card">
-        <h1>💬 Chat App</h1>
+        <div style="display:flex;align-items:center;justify-content:center;position:relative;">
+            <h1>💬 Chat App</h1>
+            <button id="theme-btn" onclick="toggleTheme()"
+                    style="position:absolute;right:0;background:transparent;border:none;font-size:20px;cursor:pointer;line-height:1;">
+                🌙
+            </button>
+        </div>
 
         <div id="tabs">
             <button class="tab active" onclick="switchTab('login')">Login</button>
@@ -31,6 +37,7 @@
             <button onclick="register()">Register</button>
         </div>
     </div>
+
 </div>
 <script src="/login/login.js"></script>
 </body>

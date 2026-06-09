@@ -14,13 +14,27 @@ public class JwtService {
 
     @Value("${app.jwt.secret}")
     private String SECRET_KEY;
-    private static final long EXPIRATION_TIME = 86400000; // 24 години в мілісекундах
+
+    @Value("${app.jwt.expiration}")
+    private long EXPIRATION_TIME;
+
+    @Value("${app.jwt.refresh-expiration}")
+    private long REFRESH_EXPIRATION_TIME;
 
     public String generateToken(String username) {
         return Jwts.builder()
                 .setSubject(username)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
+                .signWith(getSignKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public String generateRefreshToken(String username) {
+        return Jwts.builder()
+                .setSubject(username)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + REFRESH_EXPIRATION_TIME))
                 .signWith(getSignKey(), SignatureAlgorithm.HS256)
                 .compact();
     }

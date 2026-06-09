@@ -32,6 +32,7 @@ async function login() {
         const data = await res.json();
         localStorage.setItem('token', data.token);
         localStorage.setItem('username', data.username);
+        localStorage.setItem('refreshToken', data.refreshToken);
         window.location.href = '/index.html';
     } catch (e) {
         showError('Server error, try again');
@@ -63,6 +64,7 @@ async function register() {
         const data = await res.json();
         localStorage.setItem('token', data.token);
         localStorage.setItem('username', data.username);
+        localStorage.setItem('refreshToken', data.refreshToken);
         window.location.href = '/index.html';
     } catch (e) {
         showError('Server error, try again');
@@ -71,4 +73,17 @@ async function register() {
 
 function showError(msg) {
     document.getElementById('error').textContent = msg;
+}
+
+function toggleTheme() {
+    const isDark = document.body.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    document.getElementById('theme-btn').textContent = isDark ? '☀️' : '🌙';
+}
+
+// Apply saved theme on load
+const savedTheme = localStorage.getItem('theme');
+if (savedTheme === 'dark') {
+    document.body.classList.add('dark');
+    document.getElementById('theme-btn').textContent = '☀️';
 }
