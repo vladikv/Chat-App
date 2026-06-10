@@ -97,7 +97,12 @@ public class MessageService {
                 .collect(Collectors.toList());
     }
 
-
+    public List<MessageItemDTO> search(Long roomId, String query) {
+        return messageRepository.searchByRoomAndContent(roomId, query)
+                .stream()
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+    }
 
     @Transactional
     public void delete(Long messageId, String username) {

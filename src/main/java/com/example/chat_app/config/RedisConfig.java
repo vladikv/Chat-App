@@ -13,8 +13,14 @@ public class RedisConfig {
     public RedisTemplate<String, String> redisTemplate(RedisConnectionFactory factory) {
         RedisTemplate<String, String> template = new RedisTemplate<>();
         template.setConnectionFactory(factory);
-        template.setKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(new StringRedisSerializer());
+        // Use String serializer for all keys and values
+        StringRedisSerializer serializer = new StringRedisSerializer();
+        template.setKeySerializer(serializer);
+        template.setValueSerializer(serializer);
+        template.setHashKeySerializer(serializer);
+        template.setHashValueSerializer(serializer);
+        template.setDefaultSerializer(serializer);
+        template.afterPropertiesSet();
         return template;
     }
 }

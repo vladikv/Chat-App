@@ -71,6 +71,14 @@ stompClient.connect({ Authorization: 'Bearer ' + getToken() }, function () {
         updateOnlineUsers(users);
     });
 
+    fetchWithAuth(BASE_URL + '/api/unread')
+        .then(r => r.json())
+        .then(counts => updateUnreadBadges(counts));
+
+    stompClient.subscribe('/topic/unread.' + ME, function(msg) {
+        updateUnreadBadges(JSON.parse(msg.body));
+    });
+
     setTimeout(() => {
         fetchWithAuth(BASE_URL + '/api/online-users')
             .then(r => r.json())
@@ -92,7 +100,12 @@ function logout() {
 }
 
 function toggleLeftSidebar() {
-    document.getElementById('sidebar').classList.toggle('collapsed');
+    const sidebar = document.getElementById('sidebar');
+    if (window.innerWidth <= 600) {
+        sidebar.classList.toggle('hidden');
+    } else {
+        sidebar.classList.toggle('collapsed');
+    }
 }
 
 function toggleNewRoom() {
@@ -124,6 +137,25 @@ async function loadRooms() {
             };
         }
         list.appendChild(div);
+    });
+}
+
+function updateUnreadBadges(counts) {
+    document.querySelectorAll('.room-item').forEach(el => {
+        const roomId = el.id.replace('room-', '');
+        const count = counts[roomId];
+        let badge = el.querySelector('.unread-badge');
+
+        if (count && count > 0 && roomId != currentRoomId) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'unread-badge';
+                el.appendChild(badge);
+            }
+            badge.textContent = count > 99 ? '99+' : count;
+        } else if (badge) {
+            badge.remove();
+        }
     });
 }
 
@@ -193,6 +225,8 @@ async function createRoom() {
 function openRoom(roomId, roomName, el) {
     if (window.innerWidth <= 600) {
         document.getElementById('sidebar').classList.add('hidden');
+        document.getElementById('back-btn').style.display = 'flex';
+        document.getElementById('toggle-sidebar-btn').style.display = 'none';
     }
     document.querySelectorAll('.room-item').forEach(r => r.classList.remove('active'));
     el.classList.add('active');
@@ -206,6 +240,10 @@ function openRoom(roomId, roomName, el) {
     if (currentTypingSubscription) currentTypingSubscription.unsubscribe();
 
     currentRoomId = roomId;
+
+    // Mark room as read
+    fetchWithAuth(BASE_URL + `/api/rooms/${roomId}/read`, { method: 'POST' });
+    updateUnreadBadges({ [roomId]: 0 });
 
     fetchWithAuth(BASE_URL + `/api/rooms/${roomId}/messages`)
         .then(r => {
@@ -423,6 +461,8 @@ function notifyTyping() {
 
 function showSidebar() {
     document.getElementById('sidebar').classList.remove('hidden');
+    document.getElementById('back-btn').style.display = 'none';
+    document.getElementById('toggle-sidebar-btn').style.display = 'flex';
 }
 
 function showContextMenu(x, y, messageId, content, isMe) {
@@ -564,6 +604,8 @@ function openDM(username) {
 
     if (window.innerWidth <= 600) {
         document.getElementById('sidebar').classList.add('hidden');
+        document.getElementById('back-btn').style.display = 'flex';
+        document.getElementById('toggle-sidebar-btn').style.display = 'none';
     }
 }
 
@@ -659,3 +701,89 @@ function openEmojiForMsg(messageId) {
     picker.style.left = (window.innerWidth / 2 - 100) + 'px';
     picker.style.top = (window.innerHeight / 2) + 'px';
 }
+
+function toggleSearch() {
+    const bar = document.getElementById('search-bar');
+    const isVisible = bar.style.display === 'flex';
+    bar.style.display = isVisible ? 'none' : 'flex';
+    if (!isVisible) document.getElementById('search-input').focus();
+    else clearSearch();
+}
+
+function closeSearch() {
+    document.getElementById('search-bar').style.display = 'none';
+    document.getElementById('search-input').value = '';
+    clearSearch();
+}
+
+function clearSearch() {
+    document.querySelectorAll('.message').forEach(m => {
+        m.classList.remove('search-hidden', 'search-highlight');
+    });
+}
+
+let searchTimeout = null;
+async function searchMessages() {
+    const q = document.getElementById('search-input').value.trim();
+    if (!q) { clearSearch(); return; }
+    if (!currentRoomId) return;
+
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(async () => {
+        const res = await fetchWithAuth(BASE_URL + `/api/rooms/${currentRoomId}/messages/search?q=${encodeURIComponent(q)}`);
+        const results = await res.json();
+        const matchIds = new Set(results.map(m => 'msg-' + m.id));
+
+        document.querySelectorAll('.message').forEach(el => {
+            if (matchIds.has(el.id)) {
+                el.classList.remove('search-hidden');
+                el.classList.add('search-highlight');
+            } else {
+                el.classList.add('search-hidden');
+                el.classList.remove('search-highlight');
+            }
+        });
+    }, 300); // 300ms debounce
+}
+
+// Swipe right to show sidebar, swipe left to hide on mobile
+let swipeStartX = null;
+let swipeStartY = null;
+
+document.addEventListener('touchstart', (e) => {
+    swipeStartX = e.touches[0].clientX;
+    swipeStartY = e.touches[0].clientY;
+}, { passive: true });
+
+document.addEventListener('touchend', (e) => {
+    if (swipeStartX === null) return;
+
+    const dx = e.changedTouches[0].clientX - swipeStartX;
+    const dy = e.changedTouches[0].clientY - swipeStartY;
+
+    // Ignore if mostly vertical scroll
+    if (Math.abs(dy) > Math.abs(dx)) return;
+    // Ignore short swipes
+    if (Math.abs(dx) < 60) return;
+    // Only on mobile
+    if (window.innerWidth > 600) return;
+
+    const sidebar = document.getElementById('sidebar');
+
+    if (dx > 0 && swipeStartX < 40) {
+        // Swipe right from left edge — show sidebar
+        sidebar.classList.remove('hidden');
+        document.getElementById('back-btn').style.display = 'none';
+        document.getElementById('toggle-sidebar-btn').style.display = 'flex';
+    } else if (dx < 0 && !sidebar.classList.contains('hidden')) {
+        // Swipe left — hide sidebar
+        sidebar.classList.add('hidden');
+        if (currentRoomId || currentDMUser) {
+            document.getElementById('back-btn').style.display = 'flex';
+            document.getElementById('toggle-sidebar-btn').style.display = 'none';
+        }
+    }
+
+    swipeStartX = null;
+    swipeStartY = null;
+});

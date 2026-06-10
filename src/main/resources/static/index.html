@@ -52,7 +52,15 @@
     <div id="main">
         <div id="header">
             <button id="toggle-sidebar-btn" onclick="toggleLeftSidebar()">☰</button>
+            <button id="back-btn" style="display:none" onclick="showSidebar()">‹</button>
             <span id="room-title">Select a room</span>
+            <div id="search-bar" style="display:none">
+                <input id="search-input" type="text" placeholder="Search messages..."
+                       oninput="searchMessages()"
+                       onkeydown="if(event.key==='Escape') closeSearch()"/>
+                <button onclick="closeSearch()">✕</button>
+            </div>
+            <button id="search-btn" onclick="toggleSearch()">🔍</button>
             <button id="members-btn" onclick="toggleRightSidebar()">👥</button>
         </div>
         <div id="chat"></div>

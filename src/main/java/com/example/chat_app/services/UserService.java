@@ -41,6 +41,12 @@ public class UserService {
         return userRepository.findAll();
     }
 
+    public java.util.Set<String> getAllUsernames() {
+        return userRepository.findAll().stream()
+                .map(UserEntity::getUsername)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
     public UserProfileDTO getProfile(String username) {
         UserEntity user = findByUsername(username);
         return toProfileDTO(user);

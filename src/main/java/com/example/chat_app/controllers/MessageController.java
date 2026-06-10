@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.example.chat_app.services.UnreadService;
 
 import java.security.Principal;
 import java.util.List;
@@ -18,6 +19,7 @@ import java.util.List;
 public class MessageController {
 
     private final MessageService messageService;
+    private final UnreadService unreadService;
 
     @PostMapping("/{roomId}/messages")
     public ResponseEntity<MessageItemDTO> send(
@@ -30,6 +32,21 @@ public class MessageController {
     @GetMapping("/{roomId}/messages")
     public ResponseEntity<List<MessageItemDTO>> getByRoom(@PathVariable Long roomId) {
         return ResponseEntity.ok(messageService.getByRoom(roomId));
+    }
+
+    @PostMapping("/{roomId}/read")
+    public ResponseEntity<Void> markRead(
+            @PathVariable Long roomId,
+            Principal principal) {
+        unreadService.reset(roomId, principal.getName());
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/{roomId}/messages/search")
+    public ResponseEntity<List<MessageItemDTO>> search(
+            @PathVariable Long roomId,
+            @RequestParam String q) {
+        return ResponseEntity.ok(messageService.search(roomId, q));
     }
 
     @DeleteMapping("/{roomId}/messages/{messageId}")

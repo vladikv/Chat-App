@@ -18,6 +18,9 @@ import java.security.Principal;
 
 import java.util.HashMap;
 import java.util.Map;
+import com.example.chat_app.services.OnlineUserService;
+import com.example.chat_app.services.UnreadService;
+import com.example.chat_app.services.UserService;
 
 @Controller
 @RequiredArgsConstructor
@@ -26,6 +29,9 @@ public class ChatController {
     private final SimpMessagingTemplate messagingTemplate;
     private final MessageService messageService;
     private final DirectMessageService directMessageService;
+    private final UnreadService unreadService;
+    private final OnlineUserService onlineUserService;
+    private final UserService userService;
 
     @MessageMapping("/chat.send/{roomId}")
     public void sendMessage(
@@ -38,6 +44,18 @@ public class ChatController {
         messagingTemplate.convertAndSend(
                 "/topic/room." + roomId,
                 saved
+        );
+
+        // Increment unread for all users except sender
+        java.util.Set<String> allUsers = userService.getAllUsernames();
+        unreadService.increment(roomId, principal.getName(), allUsers);
+
+        // Notify all users about updated unread counts
+        allUsers.forEach(username ->
+                messagingTemplate.convertAndSend(
+                        "/topic/unread." + username,
+                        unreadService.getAll(username)
+                )
         );
     }
 
