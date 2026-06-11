@@ -1,6 +1,7 @@
 let TOKEN = localStorage.getItem('token');
 const BASE_URL = window.location.origin;
 const ME = localStorage.getItem('username');
+const avatarCache = {};
 
 function getToken() {
     TOKEN = localStorage.getItem('token');
@@ -55,6 +56,9 @@ stompClient.debug = null;
 
 stompClient.connect({ Authorization: 'Bearer ' + getToken() }, function () {
     loadRooms();
+    fetchWithAuth(BASE_URL + '/api/users')
+        .then(r => r.json())
+        .then(users => users.forEach(u => { if (u.avatarUrl) avatarCache[u.username] = u.avatarUrl; }));
     loadDMList();
 
     // Set avatar and username
@@ -130,12 +134,40 @@ async function loadRooms() {
         div.id = 'room-' + room.id;
         div.innerHTML = `<span class="room-name">${room.name}</span>`;
         div.onclick = () => openRoom(room.id, room.name, div);
+
         if (room.createdBy === ME) {
+            // Desktop: double-click to rename
             div.ondblclick = (e) => {
                 e.stopPropagation();
                 startRenameRoom(room.id, div);
             };
+
+            // Desktop: delete button on hover
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'room-delete-btn';
+            deleteBtn.textContent = '🗑';
+            deleteBtn.title = 'Delete room';
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteRoom(room.id, room.name);
+            };
+            div.appendChild(deleteBtn);
+
+            // Mobile: long-press to open action sheet
+            let roomPressTimer;
+            let roomTouchMoved = false;
+            div.addEventListener('touchstart', (e) => {
+                roomTouchMoved = false;
+                roomPressTimer = setTimeout(() => {
+                    if (roomTouchMoved) return;
+                    e.preventDefault();
+                    openRoomActionSheet(room.id, room.name, div);
+                }, 600);
+            });
+            div.addEventListener('touchend', () => clearTimeout(roomPressTimer));
+            div.addEventListener('touchmove', () => { roomTouchMoved = true; clearTimeout(roomPressTimer); });
         }
+
         list.appendChild(div);
     });
 }
@@ -203,6 +235,57 @@ async function saveRename(roomId, input) {
 
 function cancelRename(input, originalName) {
     loadRooms();
+}
+
+async function deleteRoom(roomId, roomName) {
+    if (!confirm(`Delete room "${roomName}"? All messages will be lost.`)) return;
+
+    const res = await fetchWithAuth(BASE_URL + `/api/rooms/${roomId}`, { method: 'DELETE' });
+    if (res.ok) {
+        if (currentRoomId === roomId) {
+            currentRoomId = null;
+            document.getElementById('chat').innerHTML = '';
+            document.getElementById('room-title').textContent = 'Select a room';
+            document.getElementById('bottom').style.display = 'none';
+            if (currentSubscription) currentSubscription.unsubscribe();
+        }
+        loadRooms();
+    } else {
+        alert('Failed to delete room');
+    }
+}
+
+let actionSheetRoomId = null;
+let actionSheetRoomName = null;
+let actionSheetRoomDiv = null;
+
+function openRoomActionSheet(roomId, roomName, div) {
+    actionSheetRoomId = roomId;
+    actionSheetRoomName = roomName;
+    actionSheetRoomDiv = div;
+    document.getElementById('room-action-title').textContent = '# ' + roomName;
+    document.getElementById('room-action-sheet').style.display = 'flex';
+}
+
+function closeRoomActionSheet() {
+    document.getElementById('room-action-sheet').style.display = 'none';
+    actionSheetRoomId = null;
+    actionSheetRoomName = null;
+    actionSheetRoomDiv = null;
+}
+
+function roomActionRename() {
+    const id = actionSheetRoomId;
+    const div = actionSheetRoomDiv;
+    closeRoomActionSheet();
+    startRenameRoom(id, div);
+}
+
+function roomActionDelete() {
+    const id = actionSheetRoomId;
+    const name = actionSheetRoomName;
+    closeRoomActionSheet();
+    deleteRoom(id, name);
 }
 
 async function createRoom() {
@@ -297,6 +380,16 @@ function getUserColor(username) {
     return colors[Math.abs(hash) % colors.length];
 }
 
+function getAvatarHTML(username, size = 28) {
+    const avatarUrl = avatarCache[username];
+    const color = getUserColor(username);
+    const letter = username.charAt(0).toUpperCase();
+    if (avatarUrl) {
+        return `<img src="${avatarUrl}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;" />`;
+    }
+    return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};color:white;font-weight:700;font-size:${Math.round(size*0.5)}px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${letter}</div>`;
+}
+
 function deleteMessage(messageId) {
     fetchWithAuth(BASE_URL + `/api/rooms/${currentRoomId}/messages/${messageId}`, { method: 'DELETE' })
         .then(res => {
@@ -349,23 +442,27 @@ function addMessage(msg) {
 
     const div = document.createElement('div');
     div.className = 'message ' + (isMe ? 'mine' : 'other');
+    const avatarHTML = !isMe ? `<div class="msg-avatar">${getAvatarHTML(msg.senderUsername, 32)}</div>` : '';
     div.id = 'msg-' + msg.id;
 
     div.innerHTML = `
-        <div class="sender" style="color: ${isMe ? '#8e8e93' : color}">${msg.senderUsername}</div>
-        <div class="bubble">
-            ${msg.content}
-            ${msg.edited ? '<span class="edited-label">edited</span>' : ''}
+        ${avatarHTML}
+        <div class="msg-body">
+            <div class="sender" style="color: ${isMe ? '#8e8e93' : color}">${msg.senderUsername}</div>
+            <div class="bubble">
+                ${renderMessageContent(msg.content)}
+                ${msg.edited ? '<span class="edited-label">edited</span>' : ''}
+            </div>
+            ${reactionsHTML ? `<div class="reactions">${reactionsHTML}</div>` : ''}
+            ${!isMe ? `
+            <div class="msg-actions">
+                <button class="msg-action-btn" onclick="quickReact(${msg.id}, '👍')">👍</button>
+                <button class="msg-action-btn" onclick="quickReact(${msg.id}, '❤️')">❤️</button>
+                <button class="msg-action-btn" onclick="quickReact(${msg.id}, '😂')">😂</button>
+                <button class="msg-action-btn" onclick="openEmojiForMsg(${msg.id})">➕</button>
+            </div>` : ''}
+            <div class="time">${new Date(msg.sentAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
         </div>
-        ${reactionsHTML ? `<div class="reactions">${reactionsHTML}</div>` : ''}
-        ${!isMe ? `
-        <div class="msg-actions">
-            <button class="msg-action-btn" onclick="quickReact(${msg.id}, '👍')">👍</button>
-            <button class="msg-action-btn" onclick="quickReact(${msg.id}, '❤️')">❤️</button>
-            <button class="msg-action-btn" onclick="quickReact(${msg.id}, '😂')">😂</button>
-            <button class="msg-action-btn" onclick="openEmojiForMsg(${msg.id})">➕</button>
-        </div>` : ''}
-        <div class="time">${new Date(msg.sentAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
     `;
 
     div.addEventListener('contextmenu', (e) => {
@@ -387,6 +484,14 @@ function addMessage(msg) {
     });
     div.addEventListener('touchend', () => clearTimeout(pressTimer));
     div.addEventListener('touchmove', () => { touchMoved = true; clearTimeout(pressTimer); });
+
+    // Hide avatar on previous message if same sender
+    const prevMsg = chat.lastElementChild;
+    if (prevMsg && prevMsg.dataset.sender === msg.senderUsername && !isMe) {
+        const prevAvatar = prevMsg.querySelector('.msg-avatar');
+        if (prevAvatar) prevAvatar.style.visibility = 'hidden';
+    }
+    div.dataset.sender = msg.senderUsername;
 
     chat.appendChild(div);
     chat.scrollTop = chat.scrollHeight;
@@ -618,7 +723,7 @@ function addDMMessage(msg) {
     div.id = 'dm-msg-' + msg.id;
     div.innerHTML = `
         <div class="sender" style="color: ${isMe ? '#8e8e93' : color}">${msg.senderUsername}</div>
-        <div class="bubble">${msg.content}</div>
+        <div class="bubble">${renderMessageContent(msg.content)}</div>
         <div class="time">${new Date(msg.sentAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
     `;
 
@@ -714,6 +819,114 @@ function closeSearch() {
     document.getElementById('search-bar').style.display = 'none';
     document.getElementById('search-input').value = '';
     clearSearch();
+}
+
+let pendingFile = null;
+
+async function uploadFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    pendingFile = file;
+
+    // Show preview modal
+    const content = document.getElementById('file-preview-content');
+    document.getElementById('file-caption').value = '';
+
+    if (file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        content.innerHTML = `<img src="${url}" />`;
+    } else {
+        const icon = file.type === 'application/pdf' ? '📄' :
+            file.type.includes('zip') ? '🗜️' :
+                file.type.includes('word') ? '📝' : '📎';
+        content.innerHTML = `
+            <div style="text-align:center">
+                <div class="file-preview-icon">${icon}</div>
+                <div class="file-preview-name">${file.name}</div>
+                <div class="file-preview-size">${formatFileSize(file.size)}</div>
+            </div>`;
+    }
+
+    document.getElementById('file-preview-modal').style.display = 'flex';
+    document.getElementById('file-caption').focus();
+    input.value = '';
+}
+
+function cancelFileUpload() {
+    pendingFile = null;
+    document.getElementById('file-preview-modal').style.display = 'none';
+}
+
+async function confirmFileUpload() {
+    if (!pendingFile) return;
+
+    const caption = document.getElementById('file-caption').value.trim();
+    document.getElementById('file-preview-modal').style.display = 'none';
+
+    const formData = new FormData();
+    formData.append('file', pendingFile);
+    pendingFile = null;
+
+    document.getElementById('typing-indicator').innerHTML =
+        '<div style="color:#8e8e93;font-size:13px;">⏳ Uploading...</div>';
+
+    try {
+        const res = await fetchWithAuth(BASE_URL + '/api/files/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!res.ok) { alert('Upload failed'); return; }
+
+        const data = await res.json();
+
+        let content;
+        if (data.type.startsWith('image/')) {
+            content = caption ? `[img:${data.url}|${caption}]` : `[img:${data.url}]`;
+        } else {
+            content = `[file:${data.url}|${data.name}|${formatFileSize(data.size)}]`;
+            if (caption) content += `\n${caption}`;
+        }
+
+        if (currentRoomId) {
+            stompClient.send(`/app/chat.send/${currentRoomId}`, {},
+                JSON.stringify({ content }));
+        } else if (currentDMUser) {
+            stompClient.send(`/app/dm.send/${currentDMUser}`, {},
+                JSON.stringify({ content }));
+        }
+    } catch (e) {
+        alert('Upload error');
+    } finally {
+        document.getElementById('typing-indicator').innerHTML = '';
+    }
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function renderMessageContent(content) {
+    if (content.startsWith('[img:') && content.endsWith(']')) {
+        const inner = content.slice(5, -1);
+        const [url, caption] = inner.split('|');
+        return `<img class="msg-image" src="${url}" onclick="window.open('${url}','_blank')" />
+                ${caption ? `<div style="font-size:13px;margin-top:4px;opacity:0.8">${caption}</div>` : ''}`;
+    }
+    if (content.startsWith('[file:') && content.endsWith(']')) {
+        const parts = content.slice(6, -1).split('|');
+        const [url, name, size] = parts;
+        return `<a class="msg-file" href="${url}" target="_blank" download>
+            <span class="msg-file-icon">📄</span>
+            <div class="msg-file-info">
+                <span class="msg-file-name">${name}</span>
+                <span class="msg-file-size">${size}</span>
+            </div>
+        </a>`;
+    }
+    return content;
 }
 
 function clearSearch() {

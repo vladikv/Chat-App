@@ -79,12 +79,19 @@ public class UserService {
         return toProfileDTO(userRepository.save(user));
     }
 
+    public UserProfileDTO updateAvatar(String username, String avatarUrl) {
+        UserEntity user = findByUsername(username);
+        user.setAvatarUrl(avatarUrl);
+        return toProfileDTO(userRepository.save(user));
+    }
+
     private UserProfileDTO toProfileDTO(UserEntity user) {
         UserProfileDTO dto = new UserProfileDTO();
         dto.setId(user.getId());
         dto.setUsername(user.getUsername());
         dto.setEmail(user.getEmail());
         dto.setAvatarColor(generateAvatarColor(user.getUsername()));
+        dto.setAvatarUrl(user.getAvatarUrl());
         return dto;
     }
 

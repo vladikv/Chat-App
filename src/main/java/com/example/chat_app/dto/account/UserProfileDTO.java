@@ -9,4 +9,5 @@ public class UserProfileDTO {
     private String displayUsername;
     private String email;
     private String avatarColor;
+    private String avatarUrl;
 }

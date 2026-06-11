@@ -28,4 +28,11 @@ public class UserController {
             Principal principal) {
         return ResponseEntity.ok(userService.updateProfile(principal.getName(), dto));
     }
+
+    @PutMapping("/avatar")
+    public ResponseEntity<UserProfileDTO> updateAvatar(
+            @RequestBody java.util.Map<String, String> body,
+            Principal principal) {
+        return ResponseEntity.ok(userService.updateAvatar(principal.getName(), body.get("avatarUrl")));
+    }
 }

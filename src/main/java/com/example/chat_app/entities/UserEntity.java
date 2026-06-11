@@ -16,6 +16,9 @@ public class UserEntity {
     @Column(unique = true, nullable = false)
     private String username;
 
+    @Column
+    private String avatarUrl;
+
     @Column(nullable = false)
     private String password;
 

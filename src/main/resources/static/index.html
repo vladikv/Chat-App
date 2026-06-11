@@ -66,6 +66,8 @@
         <div id="chat"></div>
         <div id="typing-indicator"></div>
         <div id="bottom" style="display:none">
+            <input type="file" id="file-input" style="display:none" onchange="uploadFile(this)" accept="image/*,.pdf,.doc,.docx,.zip,.txt"/>
+            <button id="attach-btn" onclick="document.getElementById('file-input').click()">📎</button>
             <input id="input" type="text" placeholder="Message..."
                    onkeydown="if(event.key==='Enter') send()"
                    oninput="notifyTyping()"/>
@@ -107,6 +109,33 @@
     <span onclick="addReaction('😮')">😮</span>
     <span onclick="addReaction('😢')">😢</span>
     <span onclick="addReaction('🔥')">🔥</span>
+</div>
+
+<div id="file-preview-modal" style="display:none">
+    <div id="file-preview-backdrop" onclick="cancelFileUpload()"></div>
+    <div id="file-preview-card">
+        <div id="file-preview-header">
+            <span>Send file</span>
+            <button onclick="cancelFileUpload()">✕</button>
+        </div>
+        <div id="file-preview-content"></div>
+        <input id="file-caption" type="text" placeholder="Add a caption..."
+               onkeydown="if(event.key==='Enter') confirmFileUpload()"/>
+        <div id="file-preview-actions">
+            <button id="file-cancel-btn" onclick="cancelFileUpload()">Cancel</button>
+            <button id="file-send-btn" onclick="confirmFileUpload()">Send ↑</button>
+        </div>
+    </div>
+</div>
+
+<div id="room-action-sheet" style="display:none">
+    <div id="room-action-backdrop" onclick="closeRoomActionSheet()"></div>
+    <div id="room-action-card">
+        <div id="room-action-title"></div>
+        <button onclick="roomActionRename()">✏️ Rename</button>
+        <button onclick="roomActionDelete()" class="danger">🗑 Delete</button>
+        <button onclick="closeRoomActionSheet()">Cancel</button>
+    </div>
 </div>
 </body>
 </html>

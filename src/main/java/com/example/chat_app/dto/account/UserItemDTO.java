@@ -7,4 +7,5 @@ public class UserItemDTO {
     private Long id;
     private String username;
     private boolean online;
+    private String avatarUrl;
 }

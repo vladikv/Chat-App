@@ -40,4 +40,12 @@ public class ChatRoomController {
             Principal principal) {
         return ResponseEntity.ok(chatRoomService.rename(roomId, dto.getName(), principal.getName()));
     }
+
+    @DeleteMapping("/{roomId}")
+    public ResponseEntity<Void> delete(
+            @PathVariable Long roomId,
+            Principal principal) {
+        chatRoomService.delete(roomId, principal.getName());
+        return ResponseEntity.ok().build();
+    }
 }

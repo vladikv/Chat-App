@@ -39,6 +39,7 @@ public class OnlineUserController {
                     dto.setId(u.getId());
                     dto.setUsername(u.getUsername());
                     dto.setOnline(online.contains(u.getUsername()));
+                    dto.setAvatarUrl(u.getAvatarUrl());
                     return dto;
                 })
                 .collect(Collectors.toList());

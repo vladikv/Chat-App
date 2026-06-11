@@ -34,6 +34,17 @@ public class ChatRoomService {
         return toDTO(chatRoomRepository.save(room));
     }
 
+    @org.springframework.transaction.annotation.Transactional
+    public void delete(Long roomId, String username) {
+        ChatRoomEntity room = findById(roomId);
+
+        if (room.getCreatedBy() == null || !room.getCreatedBy().getUsername().equals(username)) {
+            throw new RuntimeException("Only the creator can delete this room");
+        }
+
+        chatRoomRepository.delete(room);
+    }
+
     public ChatRoomItemDTO create(ChatRoomCreateDTO dto, String username) {
         if (chatRoomRepository.existsByName(dto.getName())) {
             throw new RuntimeException("Room already exists");

@@ -11,7 +11,11 @@
     <div id="card">
         <button id="back-btn" onclick="window.location.href='/'">‹ Back</button>
 
-        <div id="avatar"></div>
+        <div id="avatar-wrapper" style="position:relative;width:80px;margin:0 auto;cursor:pointer" onclick="document.getElementById('avatar-input').click()">
+            <div id="avatar" style="width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;color:white;overflow:hidden;"></div>
+            <div style="position:absolute;bottom:0;right:0;background:#007aff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:14px;">✏️</div>
+        </div>
+        <input type="file" id="avatar-input" style="display:none" accept="image/*" onchange="uploadAvatar(this)"/>
         <h2 id="display-username"></h2>
         <p id="display-email"></p>
 
