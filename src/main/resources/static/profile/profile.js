@@ -54,6 +54,7 @@ async function uploadAvatar(input) {
         if (!res.ok) { showError('Failed to save avatar'); return; }
 
         showSuccess('Avatar updated!');
+        localStorage.setItem('avatarUrl', data.url);
         loadProfile();
     } catch (e) {
         showError('Server error');

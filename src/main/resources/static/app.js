@@ -2,6 +2,7 @@ let TOKEN = localStorage.getItem('token');
 const BASE_URL = window.location.origin;
 const ME = localStorage.getItem('username');
 const avatarCache = {};
+const dmUnread = {};
 
 function getToken() {
     TOKEN = localStorage.getItem('token');
@@ -78,14 +79,22 @@ function onStompConnected() {
     loadRooms();
     fetchWithAuth(BASE_URL + '/api/users')
         .then(r => r.json())
-        .then(users => users.forEach(u => { if (u.avatarUrl) avatarCache[u.username] = u.avatarUrl; }));
+        .then(users => users.forEach(u => {
+            if (u.avatarUrl) {
+                avatarCache[u.username] = u.avatarUrl;
+                if (u.username === ME) localStorage.setItem('avatarUrl', u.avatarUrl);
+            }
+        }));
     loadDMList();
 
     // Set avatar and username
     const btn = document.getElementById('profile-btn');
     const color = getUserColor(ME);
-    btn.style.cssText = `width:32px;height:32px;border-radius:50%;background:${color};color:white;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;`;
-    btn.textContent = ME.charAt(0).toUpperCase();
+    const myAvatar = localStorage.getItem('avatarUrl');
+    btn.style.cssText = `width:32px;height:32px;border-radius:50%;background:${myAvatar ? 'transparent' : color};color:white;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;overflow:hidden;`;
+    btn.innerHTML = myAvatar
+        ? `<img src="${myAvatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>`
+        : ME.charAt(0).toUpperCase();
 
     const usernameLabel = document.getElementById('username-label');
     if (usernameLabel) usernameLabel.textContent = ME;
@@ -101,6 +110,21 @@ function onStompConnected() {
 
     stompClient.subscribe('/topic/unread.' + ME, function(msg) {
         updateUnreadBadges(JSON.parse(msg.body));
+    });
+
+    // Global DM subscription — always active
+    stompClient.subscribe(`/topic/dm.${ME}`, function(msg) {
+        const data = JSON.parse(msg.body);
+        const otherUser = data.senderUsername === ME ? data.receiverUsername : data.senderUsername;
+
+        if (otherUser === currentDMUser) {
+            // Currently in this DM — add message
+            addDMMessage(data);
+        } else if (data.senderUsername !== ME) {
+            // Not in this DM — show badge
+            dmUnread[otherUser] = (dmUnread[otherUser] || 0) + 1;
+            updateDMBadges();
+        }
     });
 
     // Subscribe to pin updates for current room — added dynamically in openRoom
@@ -211,6 +235,25 @@ function updateUnreadBadges(counts) {
         let badge = el.querySelector('.unread-badge');
 
         if (count && count > 0 && roomId != currentRoomId) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'unread-badge';
+                el.appendChild(badge);
+            }
+            badge.textContent = count > 99 ? '99+' : count;
+        } else if (badge) {
+            badge.remove();
+        }
+    });
+}
+
+function updateDMBadges() {
+    document.querySelectorAll('.dm-item').forEach(el => {
+        const username = el.id.replace('dm-', '');
+        const count = dmUnread[username] || 0;
+        let badge = el.querySelector('.unread-badge');
+
+        if (count > 0 && username !== currentDMUser) {
             if (!badge) {
                 badge = document.createElement('span');
                 badge.className = 'unread-badge';
@@ -426,7 +469,9 @@ function getUserColor(username) {
 }
 
 function getAvatarHTML(username, size = 28) {
-    const avatarUrl = avatarCache[username];
+    const avatarUrl = username === ME
+        ? localStorage.getItem('avatarUrl') || avatarCache[username]
+        : avatarCache[username];
     const color = getUserColor(username);
     const letter = username.charAt(0).toUpperCase();
     if (avatarUrl) {
@@ -456,6 +501,7 @@ function addMessage(msg) {
         return;
     }
 
+    if (!currentDMUser) return; // Don't add DM messages if not in DM view
     const chat = document.getElementById('chat');
     const isMe = msg.senderUsername === ME;  // ← має бути ТУТ перед усім
     const color = getUserColor(msg.senderUsername);
@@ -549,6 +595,7 @@ function addMessage(msg) {
 
 function updateOnlineUsers(users) {
     loadUsers();
+    loadDMList();
 }
 
 const OFFLINE_LIMIT = 10;
@@ -794,11 +841,14 @@ function loadDMList() {
             list.innerHTML = users
                 .filter(u => u.username !== ME)
                 .map(u => `
-                <div class="dm-item" id="dm-${u.username}" onclick="openDM('${u.username}')">
-                    <div class="dm-avatar" style="background:${getUserColor(u.username)}">${u.username.charAt(0).toUpperCase()}</div>
-                    ${u.username}
-                </div>
-            `).join('');
+                    <div class="dm-item" id="dm-${u.username}" onclick="openDM('${u.username}')">
+                        <div style="position:relative;flex-shrink:0;">
+                            <div class="dm-avatar" style="background:${getUserColor(u.username)}">${u.username.charAt(0).toUpperCase()}</div>
+                            ${u.online ? '<div class="dm-online-dot"></div>' : ''}
+                        </div>
+                        ${u.username}
+                    </div>
+                `).join('');
         });
 }
 
@@ -820,18 +870,15 @@ function openDM(username) {
     currentRoomId = null;
     currentDMUser = username;
 
+    // Clear unread for this DM
+    dmUnread[username] = 0;
+    updateDMBadges();
+
     // Load history
     fetchWithAuth(BASE_URL + `/api/dm/${username}`)
         .then(r => r.json())
         .then(messages => messages.forEach(addDMMessage));
 
-    // Subscribe to DM topic
-    currentDMSubscription = stompClient.subscribe(`/topic/dm.${ME}`, function(msg) {
-        const data = JSON.parse(msg.body);
-        if (data.senderUsername === username || data.receiverUsername === username) {
-            addDMMessage(data);
-        }
-    });
 
     if (window.innerWidth <= 600) {
         document.getElementById('sidebar').classList.add('hidden');
