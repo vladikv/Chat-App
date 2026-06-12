@@ -25,15 +25,15 @@
         <div id="error"></div>
 
         <div id="login-form">
-            <input id="login-username" type="text" placeholder="Username"/>
-            <input id="login-password" type="password" placeholder="Password"/>
+            <input id="login-username" type="text" placeholder="Username" onkeydown="if(event.key==='Enter') login()"/>
+            <input id="login-password" type="password" placeholder="Password" onkeydown="if(event.key==='Enter') login()"/>
             <button onclick="login()">Login</button>
         </div>
 
         <div id="register-form" style="display:none">
-            <input id="reg-username" type="text" placeholder="Username"/>
-            <input id="reg-email" type="email" placeholder="Email"/>
-            <input id="reg-password" type="password" placeholder="Password"/>
+            <input id="reg-username" type="text" placeholder="Username" onkeydown="if(event.key==='Enter') register()"/>
+            <input id="reg-email" type="email" placeholder="Email" onkeydown="if(event.key==='Enter') register()"/>
+            <input id="reg-password" type="password" placeholder="Password" onkeydown="if(event.key==='Enter') register()"/>
             <button onclick="register()">Register</button>
         </div>
     </div>

@@ -111,6 +111,32 @@ body.dark #status { background: #2c2c2e; border-color: #3a3a3c; color: #48484a; 
 .user-item.offline .status-dot { background: #c7c7cc; }
 .user-item.offline { color: #8e8e93; }
 
+#pin-banner { background: #e8f0ff; border-bottom: 1px solid #b3ccff; padding: 8px 16px; display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
+#pin-banner-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #1c1c1e; }
+#pin-banner button { background: none; border: none; font-size: 16px; cursor: pointer; color: #8e8e93; flex-shrink: 0; }
+#pin-banner:hover { background: #d0e2ff; }
+body.dark #pin-banner { background: #1a2a4a; border-color: #2a4a8a; }
+body.dark #pin-banner-text { color: #f2f2f7; }
+
+#reply-preview { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #f2f2f7; border-top: 1px solid #e5e5ea; font-size: 13px; width: 100%; }
+#reply-preview-content { flex: 1; border-left: 3px solid #007aff; padding-left: 8px; overflow: hidden; }
+#reply-preview-sender { font-weight: 700; color: #007aff; margin-right: 6px; }
+#reply-preview-text { color: #8e8e93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#reply-preview button { background: none; border: none; font-size: 16px; cursor: pointer; color: #8e8e93; }
+body.dark #reply-preview { background: #2c2c2e; border-color: #3a3a3c; }
+body.dark #reply-preview-text { color: #8e8e93; }
+
+.reply-quote { border-left: 3px solid rgba(255,255,255,0.6); padding: 4px 8px; margin-bottom: 6px; border-radius: 6px; background: rgba(0,0,0,0.1); font-size: 12px; cursor: pointer; }
+.message.other .reply-quote { border-left-color: #007aff; background: rgba(0,122,255,0.08); }
+.reply-quote-sender { font-weight: 700; }
+.message.mine .reply-quote-sender { color: rgba(255,255,255,0.9); }
+.message.other .reply-quote-sender { color: #007aff; }
+.message.mine .reply-quote-text { color: rgba(255,255,255,0.7); }
+.message.other .reply-quote-text { color: #8e8e93; }
+body.dark .message.other .reply-quote { background: rgba(0,122,255,0.15); }
+.reply-quote-text { color: #8e8e93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+body.dark .reply-quote { background: rgba(0,122,255,0.15); }
+
 /* Right Sidebar */
 #right-sidebar { width: 220px; min-width: 220px; background: white; border-left: 1px solid #e5e5ea; display: flex; flex-direction: column; transition: all 0.3s ease; }
 #right-sidebar.hidden { width: 0; min-width: 0; overflow: hidden; border: none; }

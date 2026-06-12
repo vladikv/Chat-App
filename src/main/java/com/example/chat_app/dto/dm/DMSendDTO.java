@@ -7,4 +7,8 @@ import lombok.Data;
 public class DMSendDTO {
     @NotBlank
     private String content;
+
+    private Long replyToId;
+    private String replyToSender;
+    private String replyToContent;
 }

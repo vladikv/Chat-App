@@ -28,6 +28,11 @@ public class DirectMessageService {
         message.setContent(dto.getContent());
         message.setSender(sender);
         message.setReceiver(receiver);
+        if (dto.getReplyToId() != null) {
+            message.setReplyToId(dto.getReplyToId());
+            message.setReplyToSender(dto.getReplyToSender());
+            message.setReplyToContent(dto.getReplyToContent());
+        }
 
         return toDTO(directMessageRepository.save(message));
     }
@@ -60,6 +65,9 @@ public class DirectMessageService {
         dto.setReceiverUsername(message.getReceiver().getUsername());
         dto.setSentAt(message.getSentAt());
         dto.setEdited(message.isEdited());
+        dto.setReplyToId(message.getReplyToId());
+        dto.setReplyToSender(message.getReplyToSender());
+        dto.setReplyToContent(message.getReplyToContent());
         return dto;
     }
 }

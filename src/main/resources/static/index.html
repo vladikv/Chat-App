@@ -63,8 +63,25 @@
             <button id="search-btn" onclick="toggleSearch()">🔍</button>
             <button id="members-btn" onclick="toggleRightSidebar()">👥</button>
         </div>
+
+        <div id="pin-banner" style="display:none">
+            <span>📌</span>
+            <div id="pin-banner-text"></div>
+            <button onclick="unpinMessage()">✕</button>
+        </div>
+
         <div id="chat"></div>
+
         <div id="typing-indicator"></div>
+
+        <div id="reply-preview" style="display:none">
+            <div id="reply-preview-content">
+                <span id="reply-preview-sender"></span>
+                <span id="reply-preview-text"></span>
+            </div>
+            <button onclick="cancelReply()">✕</button>
+        </div>
+
         <div id="bottom" style="display:none">
             <input type="file" id="file-input" style="display:none" onchange="uploadFile(this)" accept="image/*,.pdf,.doc,.docx,.zip,.txt"/>
             <button id="attach-btn" onclick="document.getElementById('file-input').click()">📎</button>
@@ -95,20 +112,21 @@
 </div>
 <script src="/app.js"></script>
 <div id="context-menu">
-<!--    <div class="context-item" id="ctx-react-thumb" onclick="addReaction('👍')">👍</div>-->
-<!--    <div class="context-item" id="ctx-react-heart" onclick="addReaction('❤️')">❤️</div>-->
-<!--    <div class="context-item" id="ctx-react-laugh" onclick="addReaction('😂')">😂</div>-->
     <div class="context-item" id="ctx-edit" onclick="contextEdit()">✏️ Edit</div>
+    <div class="context-item" id="ctx-reply" onclick="contextReply()">↩️ Reply</div>
+    <div class="context-item" id="ctx-pin" onclick="contextPin()">📌 Pin</div>
     <div class="context-item danger" id="ctx-delete" onclick="contextDelete()">🗑 Delete</div>
 </div>
 
 <div id="emoji-picker">
-    <span onclick="addReaction('👍')">👍</span>
-    <span onclick="addReaction('❤️')">❤️</span>
-    <span onclick="addReaction('😂')">😂</span>
     <span onclick="addReaction('😮')">😮</span>
     <span onclick="addReaction('😢')">😢</span>
     <span onclick="addReaction('🔥')">🔥</span>
+    <span onclick="addReaction('😂')">😂</span>
+    <span onclick="addReaction('😎')">😎</span>
+    <span onclick="addReaction('💀')">💀</span>
+    <span onclick="addReaction('🤝')">🤝</span>
+    <span onclick="addReaction('👀')">👀</span>
 </div>
 
 <div id="file-preview-modal" style="display:none">

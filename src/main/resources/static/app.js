@@ -12,7 +12,7 @@ async function fetchWithAuth(url, options = {}) {
     options.headers = { ...options.headers, Authorization: 'Bearer ' + getToken() };
     let res = await fetch(url, options);
 
-    if (res.status === 401) {
+    if (res.status === 401 || res.status === 403) {
         const refreshToken = localStorage.getItem('refreshToken');
         if (!refreshToken) { logout(); return res; }
 
@@ -46,15 +46,35 @@ let currentTypingSubscription = null;
 
 let contextMessageId = null;
 let contextOriginalContent = null;
+let contextReplyData = null;
+let replyToId = null;
+let replyToSender = null;
+let replyToContent = null;
 
 let currentDMUser = null;
 let currentDMSubscription = null;
 
-const socket = new SockJS(BASE_URL + '/ws');
-const stompClient = Stomp.over(socket);
-stompClient.debug = null;
+let currentPinSubscription = null;
 
-stompClient.connect({ Authorization: 'Bearer ' + getToken() }, function () {
+let stompClient = null;
+
+function connectStomp() {
+    const socket = new SockJS(BASE_URL + '/ws');
+    stompClient = Stomp.over(socket);
+    stompClient.debug = null;
+    stompClient.reconnect_delay = 5000;
+
+    stompClient.connect({ Authorization: 'Bearer ' + getToken() }, onStompConnected, onStompError);
+}
+
+function onStompError(error) {
+    console.log('STOMP error, reconnecting in 3s...', error);
+    setTimeout(connectStomp, 3000);
+}
+
+connectStomp();
+
+function onStompConnected() {
     loadRooms();
     fetchWithAuth(BASE_URL + '/api/users')
         .then(r => r.json())
@@ -83,12 +103,24 @@ stompClient.connect({ Authorization: 'Bearer ' + getToken() }, function () {
         updateUnreadBadges(JSON.parse(msg.body));
     });
 
+    // Subscribe to pin updates for current room — added dynamically in openRoom
+
     setTimeout(() => {
         fetchWithAuth(BASE_URL + '/api/online-users')
             .then(r => r.json())
             .then(users => updateOnlineUsers(users));
     }, 500);
-});
+};
+
+// Resubscribe to current room after reconnect
+if (currentRoomId) {
+    const activeRoom = document.querySelector('.room-item.active');
+    const roomName = document.getElementById('room-title').textContent.replace('# ', '');
+    openRoom(currentRoomId, roomName, activeRoom);
+}
+if (currentDMUser) {
+    openDM(currentDMUser);
+}
 
 function logout() {
     const refreshToken = localStorage.getItem('refreshToken');
@@ -346,6 +378,17 @@ function openRoom(roomId, roomName, el) {
     currentTypingSubscription = stompClient.subscribe(`/topic/typing.${roomId}`, function (msg) {
         showTyping(msg.body.replace(/"/g, ''));
     });
+
+    // Subscribe to pin updates
+    if (currentPinSubscription) currentPinSubscription.unsubscribe();
+    currentPinSubscription = stompClient.subscribe(`/topic/pin.${roomId}`, function(msg) {
+        showPinBanner(JSON.parse(msg.body));
+    });
+
+    // Load existing pinned message
+    fetchWithAuth(BASE_URL + `/api/rooms/${roomId}/pinned`)
+        .then(r => r.status === 204 ? null : r.json())
+        .then(msg => showPinBanner(msg));
 }
 
 function send() {
@@ -362,10 +405,12 @@ function send() {
     } else if (currentDMUser) {
         // Send DM
         stompClient.send(`/app/dm.send/${currentDMUser}`, {},
-            JSON.stringify({ content: text }));
+            JSON.stringify({ content: text, replyToId, replyToSender, replyToContent }));
+        cancelReply();
     } else if (currentRoomId) {
         stompClient.send(`/app/chat.send/${currentRoomId}`, {},
-            JSON.stringify({ content: text }));
+            JSON.stringify({ content: text, replyToId, replyToSender, replyToContent }));
+        cancelReply();
     }
 
     input.value = '';
@@ -445,11 +490,18 @@ function addMessage(msg) {
     const avatarHTML = !isMe ? `<div class="msg-avatar">${getAvatarHTML(msg.senderUsername, 32)}</div>` : '';
     div.id = 'msg-' + msg.id;
 
+    const replyHTML = msg.replyToId ? `
+    <div class="reply-quote" onclick="scrollToMessage(${msg.replyToId})">
+        <div class="reply-quote-sender">${msg.replyToSender}</div>
+        <div class="reply-quote-text">${msg.replyToContent}</div>
+    </div>` : '';
+
     div.innerHTML = `
         ${avatarHTML}
         <div class="msg-body">
             <div class="sender" style="color: ${isMe ? '#8e8e93' : color}">${msg.senderUsername}</div>
             <div class="bubble">
+                ${replyHTML}
                 ${renderMessageContent(msg.content)}
                 ${msg.edited ? '<span class="edited-label">edited</span>' : ''}
             </div>
@@ -459,7 +511,7 @@ function addMessage(msg) {
                 <button class="msg-action-btn" onclick="quickReact(${msg.id}, '👍')">👍</button>
                 <button class="msg-action-btn" onclick="quickReact(${msg.id}, '❤️')">❤️</button>
                 <button class="msg-action-btn" onclick="quickReact(${msg.id}, '😂')">😂</button>
-                <button class="msg-action-btn" onclick="openEmojiForMsg(${msg.id})">➕</button>
+                <button class="msg-action-btn" onclick="openEmojiForMsg(${msg.id}, event)">➕</button>
             </div>` : ''}
             <div class="time">${new Date(msg.sentAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
         </div>
@@ -467,9 +519,7 @@ function addMessage(msg) {
 
     div.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        if (isMe) {
-            showContextMenu(e.clientX, e.clientY, msg.id, msg.content, isMe);
-        }
+        showContextMenu(e.clientX, e.clientY, msg.id, msg.content, isMe, msg.senderUsername);
     });
 
     let pressTimer;
@@ -479,7 +529,7 @@ function addMessage(msg) {
         pressTimer = setTimeout(() => {
             if (touchMoved) return;
             const touch = e.touches[0];
-            showContextMenu(touch.clientX, touch.clientY, msg.id, msg.content, isMe);
+            showContextMenu(e.clientX, e.clientY, msg.id, msg.content, isMe, msg.senderUsername);
         }, 500);
     });
     div.addEventListener('touchend', () => clearTimeout(pressTimer));
@@ -570,16 +620,16 @@ function showSidebar() {
     document.getElementById('toggle-sidebar-btn').style.display = 'flex';
 }
 
-function showContextMenu(x, y, messageId, content, isMe) {
+function showContextMenu(x, y, messageId, content, isMe, senderUsername = '') {
     contextMessageId = messageId;
     contextOriginalContent = content;
+    contextReplyData = { sender: senderUsername };
 
     const menu = document.getElementById('context-menu');
     document.getElementById('ctx-edit').style.display = isMe ? 'flex' : 'none';
     document.getElementById('ctx-delete').style.display = isMe ? 'flex' : 'none';
-    document.getElementById('ctx-react-thumb').style.display = isMe ? 'none' : 'flex';
-    document.getElementById('ctx-react-heart').style.display = isMe ? 'none' : 'flex';
-    document.getElementById('ctx-react-laugh').style.display = isMe ? 'none' : 'flex';
+    document.getElementById('ctx-pin').style.display = isMe ? 'flex' : 'none';
+    document.getElementById('ctx-reply').style.display = 'flex';
 
     menu.classList.add('visible');
 
@@ -626,6 +676,82 @@ function contextEdit() {
         // Move cursor to end
         input.selectionStart = input.selectionEnd = input.value.length;
     }, 100);
+}
+
+function contextPin() {
+    if (!contextMessageId || !currentRoomId) return;
+    stompClient.send(`/app/chat.pin/${currentRoomId}/${contextMessageId}`, {}, '');
+    hideContextMenu();
+}
+
+function contextReply() {
+    if (!contextMessageId) return;
+    replyToId = contextMessageId;
+    replyToSender = contextReplyData?.sender || '';
+    replyToContent = contextOriginalContent;
+
+    document.getElementById('reply-preview-sender').textContent = replyToSender;
+    document.getElementById('reply-preview-text').textContent = replyToContent;
+    document.getElementById('reply-preview').style.display = 'flex';
+
+    hideContextMenu();
+    setTimeout(() => document.getElementById('input').focus(), 100);
+}
+
+function cancelReply() {
+    replyToId = null;
+    replyToSender = null;
+    replyToContent = null;
+    document.getElementById('reply-preview').style.display = 'none';
+}
+
+function scrollToMessage(messageId) {
+    const el = document.getElementById('msg-' + messageId);
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.transition = 'background 0.3s';
+        el.style.background = 'rgba(0,122,255,0.15)';
+        setTimeout(() => el.style.background = '', 1000);
+    }
+}
+
+function scrollToDMMessage(messageId) {
+    const el = document.getElementById('dm-msg-' + messageId);
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.transition = 'background 0.3s';
+        el.style.background = 'rgba(0,122,255,0.15)';
+        setTimeout(() => el.style.background = '', 1000);
+    }
+}
+
+function unpinMessage() {
+    if (!currentRoomId) return;
+    // Find currently pinned message id from banner
+    const banner = document.getElementById('pin-banner');
+    const pinnedId = banner.dataset.pinnedId;
+    if (pinnedId) {
+        stompClient.send(`/app/chat.pin/${currentRoomId}/${pinnedId}`, {}, '');
+    }
+}
+
+function showPinBanner(msg) {
+    const banner = document.getElementById('pin-banner');
+    if (!msg || !msg.pinned) {
+        banner.style.display = 'none';
+        banner.dataset.pinnedId = '';
+        return;
+    }
+    banner.style.display = 'flex';
+    banner.dataset.pinnedId = msg.id;
+    document.getElementById('pin-banner-text').textContent = msg.senderUsername + ': ' + msg.content.slice(0, 80);
+
+    // Click on banner scrolls to message
+    banner.onclick = (e) => {
+        if (e.target.tagName === 'BUTTON') return;
+        const el = document.getElementById('msg-' + msg.id);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
 }
 
 function cancelEdit() {
@@ -721,30 +847,51 @@ function addDMMessage(msg) {
     const div = document.createElement('div');
     div.className = 'message ' + (isMe ? 'mine' : 'other');
     div.id = 'dm-msg-' + msg.id;
+
+    const avatarHTML = !isMe ? `<div class="msg-avatar">${getAvatarHTML(msg.senderUsername, 32)}</div>` : '';
+    const replyHTML = msg.replyToId ? `
+        <div class="reply-quote" onclick="scrollToDMMessage(${msg.replyToId})">
+            <div class="reply-quote-sender">${msg.replyToSender}</div>
+            <div class="reply-quote-text">${msg.replyToContent}</div>
+        </div>` : '';
+
     div.innerHTML = `
-        <div class="sender" style="color: ${isMe ? '#8e8e93' : color}">${msg.senderUsername}</div>
-        <div class="bubble">${renderMessageContent(msg.content)}</div>
-        <div class="time">${new Date(msg.sentAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+        ${avatarHTML}
+        <div class="msg-body">
+            <div class="sender" style="color: ${isMe ? '#8e8e93' : color}">${msg.senderUsername}</div>
+            <div class="bubble">
+                ${replyHTML}
+                ${renderMessageContent(msg.content)}
+            </div>
+            <div class="time">${new Date(msg.sentAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+        </div>
     `;
 
-    if (isMe) {
-        div.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            showContextMenu(e.clientX, e.clientY, msg.id, msg.content, true);
-        });
-        let pressTimer;
-        let touchMoved = false;
-        div.addEventListener('touchstart', (e) => {
-            touchMoved = false;
-            pressTimer = setTimeout(() => {
-                if (touchMoved) return;
-                const touch = e.touches[0];
-                showContextMenu(touch.clientX, touch.clientY, msg.id, msg.content, true);
-            }, 500);
-        });
-        div.addEventListener('touchend', () => clearTimeout(pressTimer));
-        div.addEventListener('touchmove', () => { touchMoved = true; clearTimeout(pressTimer); });
+    div.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showContextMenu(e.clientX, e.clientY, msg.id, msg.content, isMe, msg.senderUsername);
+    });
+
+    let pressTimer;
+    let touchMoved = false;
+    div.addEventListener('touchstart', (e) => {
+        touchMoved = false;
+        pressTimer = setTimeout(() => {
+            if (touchMoved) return;
+            const touch = e.touches[0];
+            showContextMenu(touch.clientX, touch.clientY, msg.id, msg.content, isMe, msg.senderUsername);
+        }, 500);
+    });
+    div.addEventListener('touchend', () => clearTimeout(pressTimer));
+    div.addEventListener('touchmove', () => { touchMoved = true; clearTimeout(pressTimer); });
+
+    // Hide avatar if same sender as previous
+    const prevMsg = chat.lastElementChild;
+    if (prevMsg && prevMsg.dataset.sender === msg.senderUsername && !isMe) {
+        const prevAvatar = prevMsg.querySelector('.msg-avatar');
+        if (prevAvatar) prevAvatar.style.visibility = 'hidden';
     }
+    div.dataset.sender = msg.senderUsername;
 
     chat.appendChild(div);
     chat.scrollTop = chat.scrollHeight;
@@ -776,7 +923,7 @@ function addReaction(emoji) {
 
 // Close emoji picker on click outside
 document.addEventListener('click', (e) => {
-    if (!e.target.closest('#emoji-picker')) {
+    if (!e.target.closest('#emoji-picker') && !e.target.closest('.msg-action-btn')) {
         document.getElementById('emoji-picker').classList.remove('visible');
     }
 });
@@ -799,12 +946,14 @@ function buildReactionsHTML(msg) {
     `).join('');
 }
 
-function openEmojiForMsg(messageId) {
+function openEmojiForMsg(messageId, event) {
+    event.stopPropagation(); // prevent click from bubbling to document
     contextMessageId = messageId;
     const picker = document.getElementById('emoji-picker');
+    const rect = event.target.getBoundingClientRect();
+    picker.style.left = Math.min(rect.left, window.innerWidth - 220) + 'px';
+    picker.style.top = (rect.top - 60) + 'px';
     picker.classList.add('visible');
-    picker.style.left = (window.innerWidth / 2 - 100) + 'px';
-    picker.style.top = (window.innerHeight / 2) + 'px';
 }
 
 function toggleSearch() {

@@ -49,6 +49,20 @@ public class MessageController {
         return ResponseEntity.ok(messageService.search(roomId, q));
     }
 
+    @PutMapping("/{roomId}/messages/{messageId}/pin")
+    public ResponseEntity<MessageItemDTO> togglePin(
+            @PathVariable Long roomId,
+            @PathVariable Long messageId) {
+        return ResponseEntity.ok(messageService.togglePin(roomId, messageId));
+    }
+
+    @GetMapping("/{roomId}/pinned")
+    public ResponseEntity<?> getPinned(@PathVariable Long roomId) {
+        return messageService.getPinned(roomId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.noContent().build());
+    }
+
     @DeleteMapping("/{roomId}/messages/{messageId}")
     public ResponseEntity<Void> delete(
             @PathVariable Long roomId,

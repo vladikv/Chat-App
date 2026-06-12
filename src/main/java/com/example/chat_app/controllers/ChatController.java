@@ -120,4 +120,14 @@ public class ChatController {
         MessageItemDTO updated = messageService.react(messageId, payload.get("emoji"), principal.getName());
         messagingTemplate.convertAndSend("/topic/room." + roomId, updated);
     }
+
+    @MessageMapping("/chat.pin/{roomId}/{messageId}")
+    public void pinMessage(
+            @DestinationVariable Long roomId,
+            @DestinationVariable Long messageId) {
+
+        MessageItemDTO updated = messageService.togglePin(roomId, messageId);
+        // Notify room about pinned message
+        messagingTemplate.convertAndSend("/topic/pin." + roomId, updated);
+    }
 }

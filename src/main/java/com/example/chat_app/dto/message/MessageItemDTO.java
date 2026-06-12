@@ -15,4 +15,8 @@ public class MessageItemDTO {
     private Long chatRoomId;
     private LocalDateTime sentAt;
     private boolean edited;
+    private boolean pinned;
+    private Long replyToId;
+    private String replyToSender;
+    private String replyToContent;
 }

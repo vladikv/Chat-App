@@ -11,4 +11,7 @@ public class DMItemDTO {
     private String receiverUsername;
     private LocalDateTime sentAt;
     private boolean edited;
+    private Long replyToId;
+    private String replyToSender;
+    private String replyToContent;
 }

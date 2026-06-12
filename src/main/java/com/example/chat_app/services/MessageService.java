@@ -38,6 +38,10 @@ public class MessageService {
         dto.setChatRoomId(message.getChatRoom().getId());
         dto.setSentAt(message.getSentAt());
         dto.setEdited(message.isEdited());
+        dto.setPinned(message.isPinned());
+        dto.setReplyToId(message.getReplyToId());
+        dto.setReplyToSender(message.getReplyToSender());
+        dto.setReplyToContent(message.getReplyToContent());
 
         // Group reactions by emoji
         Map<String, List<String>> reactions = new HashMap<>();
@@ -85,6 +89,11 @@ public class MessageService {
         message.setContent(dto.getContent());
         message.setSender(sender);
         message.setChatRoom(room);
+        if (dto.getReplyToId() != null) {
+            message.setReplyToId(dto.getReplyToId());
+            message.setReplyToSender(dto.getReplyToSender());
+            message.setReplyToContent(dto.getReplyToContent());
+        }
 
         MessageEntity saved = messageRepository.save(message);
         return toDTO(saved);
@@ -102,6 +111,33 @@ public class MessageService {
                 .stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public MessageItemDTO togglePin(Long roomId, Long messageId) {
+        MessageEntity message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("Message not found"));
+
+        boolean wasPinned = message.isPinned();
+
+        // Unpin all in room first
+        messageRepository.findPinnedByRoomId(roomId).ifPresent(m -> {
+            m.setPinned(false);
+            messageRepository.save(m);
+        });
+
+        // If was not pinned — pin it; if was pinned — leave unpinned (toggle off)
+        if (!wasPinned) {
+            message.setPinned(true);
+            return toDTO(messageRepository.save(message));
+        }
+
+        // Return unpinned version
+        return toDTO(message);
+    }
+
+    public java.util.Optional<MessageItemDTO> getPinned(Long roomId) {
+        return messageRepository.findPinnedByRoomId(roomId).map(this::toDTO);
     }
 
     @Transactional

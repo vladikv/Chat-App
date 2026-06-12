@@ -8,4 +8,8 @@ public class MessageSendDTO {
 
     @NotBlank(message = "Message cannot be empty")
     private String content;
+
+    private Long replyToId;
+    private String replyToSender;
+    private String replyToContent;
 }
