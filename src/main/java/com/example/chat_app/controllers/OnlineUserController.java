@@ -40,6 +40,7 @@ public class OnlineUserController {
                     dto.setUsername(u.getUsername());
                     dto.setOnline(online.contains(u.getUsername()));
                     dto.setAvatarUrl(u.getAvatarUrl());
+                    dto.setTag(u.getTag());
                     return dto;
                 })
                 .collect(Collectors.toList());

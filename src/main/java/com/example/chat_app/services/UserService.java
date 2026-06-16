@@ -69,6 +69,14 @@ public class UserService {
             user.setEmail(dto.getEmail());
         }
 
+        if (dto.getTag() != null && !dto.getTag().equals(user.getTag())) {
+            String tag = dto.getTag().toLowerCase().replaceAll("[^a-z0-9_]", "");
+            if (userRepository.existsByTag(tag)) {
+                throw new RuntimeException("Tag already taken");
+            }
+            user.setTag(tag);
+        }
+
         if (dto.getCurrentPassword() != null && dto.getNewPassword() != null) {
             if (!passwordEncoder.matches(dto.getCurrentPassword(), user.getPassword())) {
                 throw new RuntimeException("Current password is incorrect");
@@ -92,6 +100,7 @@ public class UserService {
         dto.setEmail(user.getEmail());
         dto.setAvatarColor(generateAvatarColor(user.getUsername()));
         dto.setAvatarUrl(user.getAvatarUrl());
+        dto.setTag(user.getTag());
         return dto;
     }
 

@@ -61,6 +61,7 @@
                 <button onclick="closeSearch()">✕</button>
             </div>
             <button id="search-btn" onclick="toggleSearch()">🔍</button>
+            <button id="sound-btn" onclick="toggleSound()" title="Toggle sound">🔔</button>
             <button id="members-btn" onclick="toggleRightSidebar()">👥</button>
         </div>
 
@@ -82,12 +83,12 @@
             <button onclick="cancelReply()">✕</button>
         </div>
 
+        <div id="mention-dropdown" style="display:none"></div>
+
         <div id="bottom" style="display:none">
             <input type="file" id="file-input" style="display:none" onchange="uploadFile(this)" accept="image/*,.pdf,.doc,.docx,.zip,.txt"/>
             <button id="attach-btn" onclick="document.getElementById('file-input').click()">📎</button>
-            <input id="input" type="text" placeholder="Message..."
-                   onkeydown="if(event.key==='Enter') send()"
-                   oninput="notifyTyping()"/>
+            <input id="input" type="text" placeholder="Message..."/>
             <button id="send-btn" onclick="send()">↑</button>
         </div>
     </div>

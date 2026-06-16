@@ -8,4 +8,5 @@ public class UserItemDTO {
     private String username;
     private boolean online;
     private String avatarUrl;
+    private String tag;
 }

@@ -2,7 +2,9 @@ let TOKEN = localStorage.getItem('token');
 const BASE_URL = window.location.origin;
 const ME = localStorage.getItem('username');
 const avatarCache = {};
+const tagCache = {}; // username -> tag
 const dmUnread = {};
+let soundEnabled = localStorage.getItem('sound') !== 'off';
 
 function getToken() {
     TOKEN = localStorage.getItem('token');
@@ -52,6 +54,9 @@ let replyToId = null;
 let replyToSender = null;
 let replyToContent = null;
 
+let mentionIndex = -1;
+let mentionUsers = [];
+
 let currentDMUser = null;
 let currentDMSubscription = null;
 
@@ -84,6 +89,7 @@ function onStompConnected() {
                 avatarCache[u.username] = u.avatarUrl;
                 if (u.username === ME) localStorage.setItem('avatarUrl', u.avatarUrl);
             }
+            if (u.tag) tagCache[u.username] = u.tag;
         }));
     loadDMList();
 
@@ -99,9 +105,10 @@ function onStompConnected() {
     const usernameLabel = document.getElementById('username-label');
     if (usernameLabel) usernameLabel.textContent = ME;
 
+    document.getElementById('sound-btn').textContent = soundEnabled ? '🔔' : '🔕';
+
     stompClient.subscribe('/topic/online-users', function (msg) {
-        const users = JSON.parse(msg.body);
-        updateOnlineUsers(users);
+        updateOnlineUsers(JSON.parse(msg.body));
     });
 
     fetchWithAuth(BASE_URL + '/api/unread')
@@ -112,38 +119,33 @@ function onStompConnected() {
         updateUnreadBadges(JSON.parse(msg.body));
     });
 
-    // Global DM subscription — always active
     stompClient.subscribe(`/topic/dm.${ME}`, function(msg) {
         const data = JSON.parse(msg.body);
         const otherUser = data.senderUsername === ME ? data.receiverUsername : data.senderUsername;
-
         if (otherUser === currentDMUser) {
-            // Currently in this DM — add message
             addDMMessage(data);
         } else if (data.senderUsername !== ME) {
-            // Not in this DM — show badge
             dmUnread[otherUser] = (dmUnread[otherUser] || 0) + 1;
             updateDMBadges();
+            playNotificationSound();
         }
     });
-
-    // Subscribe to pin updates for current room — added dynamically in openRoom
 
     setTimeout(() => {
         fetchWithAuth(BASE_URL + '/api/online-users')
             .then(r => r.json())
             .then(users => updateOnlineUsers(users));
     }, 500);
-};
 
-// Resubscribe to current room after reconnect
-if (currentRoomId) {
-    const activeRoom = document.querySelector('.room-item.active');
-    const roomName = document.getElementById('room-title').textContent.replace('# ', '');
-    openRoom(currentRoomId, roomName, activeRoom);
-}
-if (currentDMUser) {
-    openDM(currentDMUser);
+    // Resubscribe to current room after reconnect
+    if (currentRoomId) {
+        currentDMUser = null;
+        const activeRoom = document.querySelector('.room-item.active');
+        const roomName = document.getElementById('room-title').textContent.replace('# ', '');
+        if (activeRoom) openRoom(currentRoomId, roomName, activeRoom);
+    } else if (currentDMUser) {
+        openDM(currentDMUser);
+    }
 }
 
 function logout() {
@@ -501,9 +503,8 @@ function addMessage(msg) {
         return;
     }
 
-    if (!currentDMUser) return; // Don't add DM messages if not in DM view
     const chat = document.getElementById('chat');
-    const isMe = msg.senderUsername === ME;  // ← має бути ТУТ перед усім
+    const isMe = msg.senderUsername === ME;  //
     const color = getUserColor(msg.senderUsername);
     const reactionsHTML = buildReactionsHTML(msg);
 
@@ -589,6 +590,7 @@ function addMessage(msg) {
     }
     div.dataset.sender = msg.senderUsername;
 
+    if (msg.senderUsername !== ME) playNotificationSound();
     chat.appendChild(div);
     chat.scrollTop = chat.scrollHeight;
 }
@@ -752,6 +754,48 @@ function cancelReply() {
     document.getElementById('reply-preview').style.display = 'none';
 }
 
+function showMentionDropdown(query) {
+    const allUsers = Array.from(document.querySelectorAll('.member-item'))
+        .map(el => el.textContent.trim())
+        .filter(v => v && v !== ME);
+
+    mentionUsers = query
+        ? allUsers.filter(u =>
+            u.toLowerCase().startsWith(query.toLowerCase()) ||
+            (tagCache[u] && tagCache[u].toLowerCase().startsWith(query.toLowerCase()))
+        )
+        : allUsers;
+
+    mentionUsers = mentionUsers.slice(0, 5);
+
+    const dropdown = document.getElementById('mention-dropdown');
+    if (mentionUsers.length === 0) { dropdown.style.display = 'none'; return; }
+
+    dropdown.innerHTML = mentionUsers.map((u, i) => `
+        <div class="mention-item ${i === mentionIndex ? 'active' : ''}"
+             onclick="selectMention('${u}')">
+            <div class="mention-avatar" style="background:${getUserColor(u)}">${u.charAt(0).toUpperCase()}</div>
+            <span>@${u}</span>
+        </div>
+    `).join('');
+    dropdown.style.display = 'block';
+}
+
+function hideMentionDropdown() {
+    document.getElementById('mention-dropdown').style.display = 'none';
+    mentionUsers = [];
+    mentionIndex = -1;
+}
+
+function selectMention(username) {
+    const input = document.getElementById('input');
+    const val = input.value;
+    const atIndex = val.lastIndexOf('@');
+    input.value = val.slice(0, atIndex) + '@' + username + ' ';
+    hideMentionDropdown();
+    input.focus();
+}
+
 function scrollToMessage(messageId) {
     const el = document.getElementById('msg-' + messageId);
     if (el) {
@@ -888,6 +932,8 @@ function openDM(username) {
 }
 
 function addDMMessage(msg) {
+    if (!currentDMUser) return;
+
     const chat = document.getElementById('chat');
     const isMe = msg.senderUsername === ME;
     const color = getUserColor(msg.senderUsername);
@@ -1104,6 +1150,40 @@ function formatFileSize(bytes) {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
+function playNotificationSound() {
+    if (!soundEnabled) return;
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+        const frequencies = [523.25, 659.25]; // C5, E5 — приємний акорд
+        frequencies.forEach((freq, i) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+            gain.gain.setValueAtTime(0, ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+
+            osc.start(ctx.currentTime + i * 0.05);
+            osc.stop(ctx.currentTime + 0.5);
+        });
+    } catch (e) {
+        console.log('Audio not supported');
+    }
+}
+
+function toggleSound() {
+    soundEnabled = !soundEnabled;
+    localStorage.setItem('sound', soundEnabled ? 'on' : 'off');
+    document.getElementById('sound-btn').textContent = soundEnabled ? '🔔' : '🔕';
+}
+
 function renderMessageContent(content) {
     if (content.startsWith('[img:') && content.endsWith(']')) {
         const inner = content.slice(5, -1);
@@ -1122,7 +1202,11 @@ function renderMessageContent(content) {
             </div>
         </a>`;
     }
-    return content;
+    // Highlight @mentions
+    return content.replace(/@(\w+)/g, (match, mention) => {
+        const isMe = mention === ME || mention === (tagCache[ME] || '');
+        return `<span class="mention-highlight mention-me">${match}</span>`;
+    });
 }
 
 function clearSearch() {
@@ -1195,4 +1279,42 @@ document.addEventListener('touchend', (e) => {
 
     swipeStartX = null;
     swipeStartY = null;
+});
+
+document.getElementById('input').addEventListener('input', function() {
+    notifyTyping();
+    const val = this.value;
+    const atIndex = val.lastIndexOf('@');
+    if (atIndex !== -1 && (atIndex === 0 || val[atIndex-1] === ' ')) {
+        const query = val.slice(atIndex + 1);
+        if (!query.includes(' ')) {
+            showMentionDropdown(query);
+            return;
+        }
+    }
+    hideMentionDropdown();
+});
+
+document.getElementById('input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && document.getElementById('mention-dropdown').style.display !== 'none') {
+        e.preventDefault();
+        if (mentionIndex >= 0 && mentionUsers[mentionIndex]) {
+            selectMention(mentionUsers[mentionIndex]);
+        } else if (mentionUsers[0]) {
+            selectMention(mentionUsers[0]);
+        }
+        return;
+    }
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        mentionIndex = Math.min(mentionIndex + 1, mentionUsers.length - 1);
+        showMentionDropdown(null);
+    }
+    if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        mentionIndex = Math.max(mentionIndex - 1, 0);
+        showMentionDropdown(null);
+    }
+    if (e.key === 'Escape') hideMentionDropdown();
+    if (e.key === 'Enter') send();
 });

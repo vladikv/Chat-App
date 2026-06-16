@@ -26,6 +26,8 @@ async function loadProfile() {
     // Set inputs
     document.getElementById('username').value = profile.username;
     document.getElementById('email').value = profile.email;
+
+    document.getElementById('tag').value = profile.tag || '';
 }
 
 async function uploadAvatar(input) {
@@ -70,6 +72,8 @@ async function save() {
     const dto = {};
     if (username) dto.username = username;
     if (email) dto.email = email;
+    const tag = document.getElementById('tag').value.trim();
+    if (tag) dto.tag = tag;
     if (currentPassword) dto.currentPassword = currentPassword;
     if (newPassword) dto.newPassword = newPassword;
 

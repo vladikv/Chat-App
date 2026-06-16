@@ -33,4 +33,7 @@ public class UserEntity {
 
     @Column
     private String avatarColor;
+
+    @Column(unique = true)
+    private String tag;
 }

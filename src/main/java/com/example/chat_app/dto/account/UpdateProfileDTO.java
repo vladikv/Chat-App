@@ -16,4 +16,7 @@ public class UpdateProfileDTO {
 
     @Size(min = 6)
     private String newPassword;
+
+    @Size(min = 2, max = 20)
+    private String tag;
 }
