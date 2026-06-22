@@ -16,6 +16,7 @@
         <div id="sidebar-header">
             <span>💬 Chat App</span>
         </div>
+
         <!-- Tabs -->
         <div id="tabs">
             <button class="tab-btn active" onclick="switchTab('rooms')"># Rooms</button>
@@ -43,8 +44,23 @@
         <div id="user-panel">
             <div id="profile-btn" onclick="window.location.href='/profile/profile.html'"></div>
             <span id="username-label"></span>
-            <button id="theme-btn" onclick="toggleTheme()">🌙</button>
-            <button id="logout-btn" onclick="logout()">Log out</button>
+            <button id="settings-btn" onclick="toggleSettingsMenu()" title="Settings">⚙️</button>
+        </div>
+
+        <!-- Settings menu -->
+        <div id="settings-menu" style="display:none">
+            <div class="settings-item" onclick="toggleTheme()">
+                <span id="theme-icon">🌙</span>
+                <span id="theme-label">Dark mode</span>
+            </div>
+            <div class="settings-item" onclick="toggleSound()">
+                <span id="sound-icon">🔔</span>
+                <span id="sound-label">Sound</span>
+            </div>
+            <div class="settings-item danger" onclick="logout()">
+                <span>🚪</span>
+                <span>Log out</span>
+            </div>
         </div>
     </div>
 
@@ -61,7 +77,6 @@
                 <button onclick="closeSearch()">✕</button>
             </div>
             <button id="search-btn" onclick="toggleSearch()">🔍</button>
-            <button id="sound-btn" onclick="toggleSound()" title="Toggle sound">🔔</button>
             <button id="members-btn" onclick="toggleRightSidebar()">👥</button>
         </div>
 
@@ -71,25 +86,23 @@
             <button onclick="unpinMessage()">✕</button>
         </div>
 
-        <div id="chat"></div>
-
-        <div id="typing-indicator"></div>
-
-        <div id="reply-preview" style="display:none">
-            <div id="reply-preview-content">
-                <span id="reply-preview-sender"></span>
-                <span id="reply-preview-text"></span>
+        <div id="chat-card">
+            <div id="chat"></div>
+            <div id="typing-indicator"></div>
+            <div id="reply-preview" style="display:none">
+                <div id="reply-preview-content">
+                    <span id="reply-preview-sender"></span>
+                    <span id="reply-preview-text"></span>
+                </div>
+                <button onclick="cancelReply()">✕</button>
             </div>
-            <button onclick="cancelReply()">✕</button>
-        </div>
-
-        <div id="mention-dropdown" style="display:none"></div>
-
-        <div id="bottom" style="display:none">
-            <input type="file" id="file-input" style="display:none" onchange="uploadFile(this)" accept="image/*,.pdf,.doc,.docx,.zip,.txt"/>
-            <button id="attach-btn" onclick="document.getElementById('file-input').click()">📎</button>
-            <input id="input" type="text" placeholder="Message..."/>
-            <button id="send-btn" onclick="send()">↑</button>
+            <div id="mention-dropdown" style="display:none"></div>
+            <div id="bottom" style="display:none">
+                <input type="file" id="file-input" style="display:none" onchange="uploadFile(this)" accept="image/*,.pdf,.doc,.docx,.zip,.txt"/>
+                <button id="attach-btn" onclick="document.getElementById('file-input').click()">📎</button>
+                <input id="input" type="text" placeholder="Message..."/>
+                <button id="send-btn" onclick="send()">↑</button>
+            </div>
         </div>
     </div>
 
@@ -112,6 +125,7 @@
 
 </div>
 <script src="/app.js"></script>
+
 <div id="context-menu">
     <div class="context-item" id="ctx-edit" onclick="contextEdit()">✏️ Edit</div>
     <div class="context-item" id="ctx-reply" onclick="contextReply()">↩️ Reply</div>

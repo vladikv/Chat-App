@@ -105,7 +105,11 @@ function onStompConnected() {
     const usernameLabel = document.getElementById('username-label');
     if (usernameLabel) usernameLabel.textContent = ME;
 
-    document.getElementById('sound-btn').textContent = soundEnabled ? '🔔' : '🔕';
+    const savedTheme = localStorage.getItem('theme');
+    document.getElementById('theme-icon').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+    document.getElementById('theme-label').textContent = savedTheme === 'dark' ? 'Light mode' : 'Dark mode';
+    document.getElementById('sound-icon').textContent = soundEnabled ? '🔔' : '🔕';
+    document.getElementById('sound-label').textContent = soundEnabled ? 'Sound on' : 'Sound off';
 
     stompClient.subscribe('/topic/online-users', function (msg) {
         updateOnlineUsers(JSON.parse(msg.body));
@@ -180,6 +184,18 @@ function toggleRightSidebar() {
     document.getElementById('right-sidebar').classList.toggle('hidden');
 }
 
+function toggleSettingsMenu() {
+    const menu = document.getElementById('settings-menu');
+    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+// Close settings menu on click outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('#settings-menu') && !e.target.closest('#settings-btn')) {
+        const menu = document.getElementById('settings-menu');
+        if (menu) menu.style.display = 'none';
+    }
+});
 
 async function loadRooms() {
     const res = await fetchWithAuth(BASE_URL + '/api/rooms')
@@ -866,15 +882,14 @@ document.addEventListener('touchend', (e) => {
 function toggleTheme() {
     const isDark = document.body.classList.toggle('dark');
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    document.getElementById('theme-btn').textContent = isDark ? '☀️' : '🌙';
+    document.getElementById('theme-icon').textContent = isDark ? '☀️' : '🌙';
+    document.getElementById('theme-label').textContent = isDark ? 'Light mode' : 'Dark mode';
 }
 
 // Load saved theme
 const savedTheme = localStorage.getItem('theme');
 if (savedTheme === 'dark') {
     document.body.classList.add('dark');
-    const btn = document.getElementById('theme-btn');
-    if (btn) btn.textContent = '☀️';
 }
 
 function loadDMList() {
@@ -1181,7 +1196,8 @@ function playNotificationSound() {
 function toggleSound() {
     soundEnabled = !soundEnabled;
     localStorage.setItem('sound', soundEnabled ? 'on' : 'off');
-    document.getElementById('sound-btn').textContent = soundEnabled ? '🔔' : '🔕';
+    document.getElementById('sound-icon').textContent = soundEnabled ? '🔔' : '🔕';
+    document.getElementById('sound-label').textContent = soundEnabled ? 'Sound on' : 'Sound off';
 }
 
 function renderMessageContent(content) {
