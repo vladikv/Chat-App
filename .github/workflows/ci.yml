@@ -16,6 +16,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: chatapp
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,10 +51,17 @@ jobs:
           java-version: '21'
           cache: maven
 
-      # Unit tests + Testcontainers integration tests
-      # (Docker is preinstalled on ubuntu-latest runners)
       - name: Run tests
         run: mvn -B verify
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5433/chatapp
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: postgres
+          SPRING_DATA_REDIS_HOST: localhost
+          SPRING_DATA_REDIS_PORT: 6379
+          APP_JWT_SECRET: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          APP_JWT_EXPIRATION: 900000
+          APP_JWT_REFRESH_EXPIRATION: 604800000
 
       - name: Upload test reports
         if: always()
