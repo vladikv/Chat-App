@@ -11,10 +11,13 @@ import com.example.chat_app.repositories.MessageRepository;
 import com.example.chat_app.repositories.ReactionRepository;
 import com.example.chat_app.repositories.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +32,8 @@ public class MessageService {
     private final UserService userService;
     private final ReactionRepository reactionRepository;
     private final UserRepository userRepository;
+
+    private static final int MAX_PAGE_SIZE = 100;
 
     private MessageItemDTO toDTO(MessageEntity message) {
         MessageItemDTO dto = new MessageItemDTO();
@@ -104,6 +109,26 @@ public class MessageService {
                 .stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Cursor-based page of room history.
+     * Returns up to {@code limit} messages older than {@code beforeId}
+     * (or the newest ones when beforeId is null), ordered oldest -> newest.
+     */
+    public List<MessageItemDTO> getPage(Long roomId, Long beforeId, int limit) {
+        int size = Math.min(Math.max(limit, 1), MAX_PAGE_SIZE);
+        Pageable pageable = PageRequest.of(0, size);
+
+        List<MessageEntity> page = (beforeId == null)
+                ? messageRepository.findByChatRoomIdOrderByIdDesc(roomId, pageable)
+                : messageRepository.findByChatRoomIdAndIdLessThanOrderByIdDesc(roomId, beforeId, pageable);
+
+        List<MessageItemDTO> result = page.stream()
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+        Collections.reverse(result); // fetched newest-first, UI wants oldest-first
+        return result;
     }
 
     public List<MessageItemDTO> search(Long roomId, String query) {
