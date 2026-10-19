@@ -421,7 +421,7 @@ function openRoom(roomId, roomName, el) {
     fetchWithAuth(BASE_URL + `/api/rooms/${roomId}/read`, { method: 'POST' });
     updateUnreadBadges({ [roomId]: 0 });
 
-    loadInitialMessages(roomId);
+    loadInitialMessages(getChatContext());
 
     currentSubscription = stompClient.subscribe(`/topic/room.${roomId}`, function (msg) {
         addMessage(JSON.parse(msg.body));
@@ -616,15 +616,41 @@ function addMessage(msg, opts = {}) {
     if (!opts.container) chat.scrollTop = chat.scrollHeight;
 }
 
-// ---------- Message history pagination (rooms) ----------
+// ---------- Message history pagination (rooms + DMs) ----------
 const PAGE_SIZE = 30;
 let hasMoreMessages = false;
 let loadingOlder = false;
 
-async function fetchMessagePage(roomId, beforeId) {
+// Describes the conversation that is currently open (room or DM), or null
+function getChatContext() {
+    if (currentRoomId) {
+        return {
+            key: 'room:' + currentRoomId,
+            url: `/api/rooms/${currentRoomId}/messages`,
+            idPrefix: 'msg-',
+            render: addMessage
+        };
+    }
+    if (currentDMUser) {
+        return {
+            key: 'dm:' + currentDMUser,
+            url: `/api/dm/${encodeURIComponent(currentDMUser)}`,
+            idPrefix: 'dm-msg-',
+            render: addDMMessage
+        };
+    }
+    return null;
+}
+
+function isStillOpen(ctx) {
+    const now = getChatContext();
+    return !!now && now.key === ctx.key;
+}
+
+async function fetchMessagePage(ctx, beforeId) {
     const params = new URLSearchParams({ limit: PAGE_SIZE });
     if (beforeId) params.set('before', beforeId);
-    const r = await fetchWithAuth(BASE_URL + `/api/rooms/${roomId}/messages?${params}`);
+    const r = await fetchWithAuth(BASE_URL + `${ctx.url}?${params}`);
     if (!r.ok) {
         console.error('Failed to load messages:', r.status);
         return [];
@@ -632,64 +658,65 @@ async function fetchMessagePage(roomId, beforeId) {
     return r.json();
 }
 
-function getOldestLoadedId() {
+function getOldestLoadedId(ctx) {
     const first = document.querySelector('#chat .message');
-    return first ? Number(first.id.replace('msg-', '')) : null;
+    return first ? Number(first.id.slice(ctx.idPrefix.length)) : null;
 }
 
-async function loadInitialMessages(roomId) {
+async function loadInitialMessages(ctx) {
+    if (!ctx) return;
     hasMoreMessages = false;
     loadingOlder = true; // block the scroll handler until the first page is in
     try {
-        const batch = await fetchMessagePage(roomId, null);
-        if (roomId !== currentRoomId) return; // user switched rooms meanwhile
-        batch.forEach(m => addMessage(m));
+        const batch = await fetchMessagePage(ctx, null);
+        if (!isStillOpen(ctx)) return; // user switched conversations meanwhile
+        batch.forEach(m => ctx.render(m));
         hasMoreMessages = batch.length === PAGE_SIZE;
     } catch (e) {
         console.error('Messages error:', e);
     } finally {
-        if (roomId === currentRoomId) loadingOlder = false;
+        if (isStillOpen(ctx)) loadingOlder = false;
     }
-    fillViewportIfShort(roomId);
+    fillViewportIfShort(ctx);
 }
 
 async function loadOlderMessages() {
-    if (loadingOlder || !hasMoreMessages || !currentRoomId) return;
-    const roomId = currentRoomId;
-    const beforeId = getOldestLoadedId();
+    const ctx = getChatContext();
+    if (!ctx || loadingOlder || !hasMoreMessages) return;
+    const beforeId = getOldestLoadedId(ctx);
     if (!beforeId) return;
 
     loadingOlder = true;
     try {
-        const batch = await fetchMessagePage(roomId, beforeId);
-        if (roomId !== currentRoomId) return;
-        if (batch.length) prependMessages(batch);
+        const batch = await fetchMessagePage(ctx, beforeId);
+        if (!isStillOpen(ctx)) return;
+        if (batch.length) prependMessages(batch, ctx);
         hasMoreMessages = batch.length === PAGE_SIZE;
     } catch (e) {
         console.error('Older messages error:', e);
     } finally {
-        if (roomId === currentRoomId) loadingOlder = false;
+        if (isStillOpen(ctx)) loadingOlder = false;
     }
-    fillViewportIfShort(roomId);
+    fillViewportIfShort(ctx);
 }
 
 // If the loaded messages don't fill the screen there is no scrollbar,
 // so the scroll handler would never fire - keep loading until it does.
-function fillViewportIfShort(roomId) {
+function fillViewportIfShort(ctx) {
     const chat = document.getElementById('chat');
-    if (roomId === currentRoomId && hasMoreMessages && chat.scrollHeight <= chat.clientHeight) {
+    if (isStillOpen(ctx) && hasMoreMessages && chat.scrollHeight <= chat.clientHeight) {
         loadOlderMessages();
     }
 }
 
-function prependMessages(messages) {
+function prependMessages(messages, ctx) {
     const chat = document.getElementById('chat');
 
     // Render the batch off-DOM so separators/avatars are computed within the batch
     const temp = document.createElement('div');
-    messages.forEach(m => addMessage(m, { container: temp }));
+    messages.forEach(m => ctx.render(m, { container: temp }));
 
-    // Boundary fix 1: drop the old first separator if it repeats the batch's last day
+    // Boundary fix 1 (rooms): drop the old first separator if it repeats the batch's last day
     const lastNew = temp.lastElementChild;
     let firstOld = chat.firstElementChild;
     if (firstOld && lastNew && firstOld.classList.contains('date-separator')
@@ -1048,10 +1075,8 @@ function openDM(username) {
     dmUnread[username] = 0;
     updateDMBadges();
 
-    // Load history
-    fetchWithAuth(BASE_URL + `/api/dm/${username}`)
-        .then(r => r.json())
-        .then(messages => messages.forEach(addDMMessage));
+    // Load newest page of history
+    loadInitialMessages(getChatContext());
 
 
     if (window.innerWidth <= 600) {
@@ -1061,10 +1086,11 @@ function openDM(username) {
     }
 }
 
-function addDMMessage(msg) {
+function addDMMessage(msg, opts = {}) {
     if (!currentDMUser) return;
 
-    const chat = document.getElementById('chat');
+    // opts.container: render into a detached element (used when prepending older history)
+    const chat = opts.container || document.getElementById('chat');
     const isMe = msg.senderUsername === ME;
     const color = getUserColor(msg.senderUsername);
     const div = document.createElement('div');
@@ -1117,7 +1143,7 @@ function addDMMessage(msg) {
     div.dataset.sender = msg.senderUsername;
 
     chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
+    if (!opts.container) chat.scrollTop = chat.scrollHeight;
 }
 
 function switchTab(tab) {

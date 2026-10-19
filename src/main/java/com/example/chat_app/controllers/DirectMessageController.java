@@ -21,9 +21,11 @@ public class DirectMessageController {
     @GetMapping("/{username}")
     public ResponseEntity<List<DMItemDTO>> getConversation(
             @PathVariable String username,
+            @RequestParam(required = false) Long before,
+            @RequestParam(defaultValue = "30") int limit,
             Principal principal) {
-        return ResponseEntity.ok(directMessageService.getConversation(
-                principal.getName(), username));
+        return ResponseEntity.ok(directMessageService.getConversationPage(
+                principal.getName(), username, before, limit));
     }
 
     @PostMapping("/{username}")
