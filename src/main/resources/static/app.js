@@ -598,6 +598,20 @@ function addMessage(msg) {
     div.addEventListener('touchend', () => clearTimeout(pressTimer));
     div.addEventListener('touchmove', () => { touchMoved = true; clearTimeout(pressTimer); });
 
+    // Date separator
+    const msgDate = new Date(msg.sentAt).toDateString();
+    const prevDate = prevMsg ? new Date(prevMsg.dataset.date || 0).toDateString() : null;
+    if (msgDate !== prevDate) {
+        const separator = document.createElement('div');
+        separator.className = 'date-separator';
+        separator.dataset.date = msg.sentAt;
+        const today = new Date().toDateString();
+        const yesterday = new Date(Date.now() - 86400000).toDateString();
+        separator.innerHTML = `<span>${msgDate === today ? 'Today' : msgDate === yesterday ? 'Yesterday' : new Date(msg.sentAt).toLocaleDateString([], {day:'numeric', month:'long', year:'numeric'})}</span>`;
+        chat.appendChild(separator);
+    }
+    div.dataset.date = msg.sentAt;
+
     // Hide avatar on previous message if same sender
     const prevMsg = chat.lastElementChild;
     if (prevMsg && prevMsg.dataset.sender === msg.senderUsername && !isMe) {
