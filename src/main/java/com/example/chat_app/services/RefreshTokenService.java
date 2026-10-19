@@ -22,7 +22,8 @@ public class RefreshTokenService {
     @Transactional
     public RefreshTokenEntity create(UserEntity user, String token) {
         // Revoke all existing tokens for user (single session)
-        refreshTokenRepository.revokeAllByUser(user);
+        refreshTokenRepository.deleteAllByUser(user);
+        refreshTokenRepository.flush();
 
         RefreshTokenEntity rt = new RefreshTokenEntity();
         rt.setToken(token);

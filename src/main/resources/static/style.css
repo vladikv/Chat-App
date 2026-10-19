@@ -569,6 +569,16 @@ body.dark .message.other .reply-quote { background: rgba(10,132,255,0.12); }
 body.dark #mention-dropdown { background: #2c2c2e; box-shadow: 0 -4px 24px rgba(0,0,0,0.4); }
 body.dark .mention-item:hover, body.dark .mention-item.active { background: #3a3a3c; }
 
+.date-separator {
+    display: flex; align-items: center; gap: 12px;
+    margin: 12px 0; color: #8e8e93; font-size: 12px; font-weight: 600;
+}
+.date-separator::before, .date-separator::after {
+    content: ''; flex: 1; height: 1px; background: #e5e5ea;
+}
+body.dark .date-separator { color: #636366; }
+body.dark .date-separator::before, body.dark .date-separator::after { background: #2c2c2e; }
+
 /* ── MOBILE ── */
 @media (max-width: 600px) {
     body { align-items: stretch; justify-content: stretch; background: #f2f2f7; }
