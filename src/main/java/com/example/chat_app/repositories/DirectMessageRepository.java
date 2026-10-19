@@ -1,6 +1,7 @@
 package com.example.chat_app.repositories;
 
 import com.example.chat_app.entities.DirectMessageEntity;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,4 +18,26 @@ public interface DirectMessageRepository extends JpaRepository<DirectMessageEnti
     List<DirectMessageEntity> findConversation(
             @Param("user1") String user1,
             @Param("user2") String user2);
+
+    // Newest messages of a conversation (first page), newest first
+    @Query("SELECT m FROM DirectMessageEntity m WHERE " +
+            "((m.sender.username = :user1 AND m.receiver.username = :user2) OR " +
+            "(m.sender.username = :user2 AND m.receiver.username = :user1)) " +
+            "ORDER BY m.id DESC")
+    List<DirectMessageEntity> findConversationPage(
+            @Param("user1") String user1,
+            @Param("user2") String user2,
+            Pageable pageable);
+
+    // Messages older than the cursor (id), newest first
+    @Query("SELECT m FROM DirectMessageEntity m WHERE " +
+            "((m.sender.username = :user1 AND m.receiver.username = :user2) OR " +
+            "(m.sender.username = :user2 AND m.receiver.username = :user1)) " +
+            "AND m.id < :beforeId " +
+            "ORDER BY m.id DESC")
+    List<DirectMessageEntity> findConversationBefore(
+            @Param("user1") String user1,
+            @Param("user2") String user2,
+            @Param("beforeId") Long beforeId,
+            Pageable pageable);
 }

@@ -6,9 +6,12 @@ import com.example.chat_app.entities.DirectMessageEntity;
 import com.example.chat_app.entities.UserEntity;
 import com.example.chat_app.repositories.DirectMessageRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -18,6 +21,8 @@ public class DirectMessageService {
 
     private final DirectMessageRepository directMessageRepository;
     private final UserService userService;
+
+    private static final int MAX_PAGE_SIZE = 100;
 
     @Transactional
     public DMItemDTO send(DMSendDTO dto, String senderUsername, String receiverUsername) {
@@ -43,6 +48,27 @@ public class DirectMessageService {
                 .stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Cursor-based page of a conversation.
+     * Returns up to {@code limit} messages older than {@code beforeId}
+     * (or the newest ones when beforeId is null), ordered oldest -> newest.
+     */
+    @Transactional(readOnly = true)
+    public List<DMItemDTO> getConversationPage(String user1, String user2, Long beforeId, int limit) {
+        int size = Math.min(Math.max(limit, 1), MAX_PAGE_SIZE);
+        Pageable pageable = PageRequest.of(0, size);
+
+        List<DirectMessageEntity> page = (beforeId == null)
+                ? directMessageRepository.findConversationPage(user1, user2, pageable)
+                : directMessageRepository.findConversationBefore(user1, user2, beforeId, pageable);
+
+        List<DMItemDTO> result = page.stream()
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+        Collections.reverse(result); // fetched newest-first, UI wants oldest-first
+        return result;
     }
 
     @Transactional
