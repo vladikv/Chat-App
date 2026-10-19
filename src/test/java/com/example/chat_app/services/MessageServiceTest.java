@@ -16,6 +16,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
