@@ -421,16 +421,7 @@ function openRoom(roomId, roomName, el) {
     fetchWithAuth(BASE_URL + `/api/rooms/${roomId}/read`, { method: 'POST' });
     updateUnreadBadges({ [roomId]: 0 });
 
-    fetchWithAuth(BASE_URL + `/api/rooms/${roomId}/messages`)
-        .then(r => {
-            if (!r.ok) {
-                console.error('Failed to load messages:', r.status);
-                return [];
-            }
-            return r.json();
-        })
-        .then(messages => messages && messages.forEach(addMessage))
-        .catch(e => console.error('Messages error:', e));
+    loadInitialMessages(roomId);
 
     currentSubscription = stompClient.subscribe(`/topic/room.${roomId}`, function (msg) {
         addMessage(JSON.parse(msg.body));
@@ -501,17 +492,16 @@ function getAvatarHTML(username, size = 28) {
 function deleteMessage(messageId) {
     fetchWithAuth(BASE_URL + `/api/rooms/${currentRoomId}/messages/${messageId}`, { method: 'DELETE' })
         .then(res => {
-        if (res.ok) {
-            const el = document.getElementById('msg-' + messageId);
-            if (el) el.remove();
-            // Notify others via WebSocket
-            stompClient.send(`/app/chat.delete/${currentRoomId}/${messageId}`, {}, '');
-        }
-    });
+            if (res.ok) {
+                const el = document.getElementById('msg-' + messageId);
+                if (el) el.remove();
+                // Notify others via WebSocket
+                stompClient.send(`/app/chat.delete/${currentRoomId}/${messageId}`, {}, '');
+            }
+        });
 }
 
-function addMessage(msg) {
-    console.log('Received message:', msg);
+function addMessage(msg, opts = {}) {
 
     if (msg.deletedId) {
         const el = document.getElementById('msg-' + msg.deletedId);
@@ -519,8 +509,9 @@ function addMessage(msg) {
         return;
     }
 
-    const chat = document.getElementById('chat');
-    const isMe = msg.senderUsername === ME;  //
+    // opts.container: render into a detached element (used when prepending older history)
+    const chat = opts.container || document.getElementById('chat');
+    const isMe = msg.senderUsername === ME;
     const color = getUserColor(msg.senderUsername);
     const reactionsHTML = buildReactionsHTML(msg);
 
@@ -599,6 +590,7 @@ function addMessage(msg) {
     div.addEventListener('touchmove', () => { touchMoved = true; clearTimeout(pressTimer); });
 
     // Date separator
+    const prevMsg = chat.lastElementChild;
     const msgDate = new Date(msg.sentAt).toDateString();
     const prevDate = prevMsg ? new Date(prevMsg.dataset.date || 0).toDateString() : null;
     if (msgDate !== prevDate) {
@@ -613,16 +605,125 @@ function addMessage(msg) {
     div.dataset.date = msg.sentAt;
 
     // Hide avatar on previous message if same sender
-    const prevMsg = chat.lastElementChild;
     if (prevMsg && prevMsg.dataset.sender === msg.senderUsername && !isMe) {
         const prevAvatar = prevMsg.querySelector('.msg-avatar');
         if (prevAvatar) prevAvatar.style.visibility = 'hidden';
     }
     div.dataset.sender = msg.senderUsername;
 
-    if (msg.senderUsername !== ME) playNotificationSound();
+    if (msg.senderUsername !== ME && !opts.container) playNotificationSound();
     chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
+    if (!opts.container) chat.scrollTop = chat.scrollHeight;
+}
+
+// ---------- Message history pagination (rooms) ----------
+const PAGE_SIZE = 30;
+let hasMoreMessages = false;
+let loadingOlder = false;
+
+async function fetchMessagePage(roomId, beforeId) {
+    const params = new URLSearchParams({ limit: PAGE_SIZE });
+    if (beforeId) params.set('before', beforeId);
+    const r = await fetchWithAuth(BASE_URL + `/api/rooms/${roomId}/messages?${params}`);
+    if (!r.ok) {
+        console.error('Failed to load messages:', r.status);
+        return [];
+    }
+    return r.json();
+}
+
+function getOldestLoadedId() {
+    const first = document.querySelector('#chat .message');
+    return first ? Number(first.id.replace('msg-', '')) : null;
+}
+
+async function loadInitialMessages(roomId) {
+    hasMoreMessages = false;
+    loadingOlder = true; // block the scroll handler until the first page is in
+    try {
+        const batch = await fetchMessagePage(roomId, null);
+        if (roomId !== currentRoomId) return; // user switched rooms meanwhile
+        batch.forEach(m => addMessage(m));
+        hasMoreMessages = batch.length === PAGE_SIZE;
+    } catch (e) {
+        console.error('Messages error:', e);
+    } finally {
+        if (roomId === currentRoomId) loadingOlder = false;
+    }
+    fillViewportIfShort(roomId);
+}
+
+async function loadOlderMessages() {
+    if (loadingOlder || !hasMoreMessages || !currentRoomId) return;
+    const roomId = currentRoomId;
+    const beforeId = getOldestLoadedId();
+    if (!beforeId) return;
+
+    loadingOlder = true;
+    try {
+        const batch = await fetchMessagePage(roomId, beforeId);
+        if (roomId !== currentRoomId) return;
+        if (batch.length) prependMessages(batch);
+        hasMoreMessages = batch.length === PAGE_SIZE;
+    } catch (e) {
+        console.error('Older messages error:', e);
+    } finally {
+        if (roomId === currentRoomId) loadingOlder = false;
+    }
+    fillViewportIfShort(roomId);
+}
+
+// If the loaded messages don't fill the screen there is no scrollbar,
+// so the scroll handler would never fire - keep loading until it does.
+function fillViewportIfShort(roomId) {
+    const chat = document.getElementById('chat');
+    if (roomId === currentRoomId && hasMoreMessages && chat.scrollHeight <= chat.clientHeight) {
+        loadOlderMessages();
+    }
+}
+
+function prependMessages(messages) {
+    const chat = document.getElementById('chat');
+
+    // Render the batch off-DOM so separators/avatars are computed within the batch
+    const temp = document.createElement('div');
+    messages.forEach(m => addMessage(m, { container: temp }));
+
+    // Boundary fix 1: drop the old first separator if it repeats the batch's last day
+    const lastNew = temp.lastElementChild;
+    let firstOld = chat.firstElementChild;
+    if (firstOld && lastNew && firstOld.classList.contains('date-separator')
+        && new Date(firstOld.dataset.date).toDateString() === new Date(lastNew.dataset.date).toDateString()) {
+        firstOld.remove();
+        firstOld = chat.firstElementChild;
+    }
+
+    // Boundary fix 2: hide avatar on the batch's last message if the next one is the same sender
+    if (lastNew && firstOld && lastNew.dataset.sender
+        && lastNew.dataset.sender === firstOld.dataset.sender
+        && lastNew.dataset.sender !== ME) {
+        const av = lastNew.querySelector('.msg-avatar');
+        if (av) av.style.visibility = 'hidden';
+    }
+
+    // Prepend and keep the user's current position on screen
+    const prevHeight = chat.scrollHeight;
+    const prevTop = chat.scrollTop;
+    chat.prepend(...Array.from(temp.childNodes));
+    chat.scrollTop = prevTop + (chat.scrollHeight - prevHeight);
+}
+
+function initPaginationScroll() {
+    const chat = document.getElementById('chat');
+    if (!chat) return;
+    chat.addEventListener('scroll', () => {
+        if (chat.scrollTop < 150) loadOlderMessages();
+    });
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPaginationScroll);
+} else {
+    initPaginationScroll();
 }
 
 function updateOnlineUsers(users) {

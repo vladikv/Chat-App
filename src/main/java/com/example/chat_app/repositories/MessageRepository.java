@@ -1,6 +1,7 @@
 package com.example.chat_app.repositories;
 
 import com.example.chat_app.entities.MessageEntity;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import java.util.List;
@@ -10,6 +11,12 @@ import org.springframework.data.repository.query.Param;
 @Repository
 public interface MessageRepository extends JpaRepository<MessageEntity, Long> {
     List<MessageEntity> findByChatRoomIdOrderBySentAtAsc(Long chatRoomId);
+
+    // Newest messages in a room (first page), newest first
+    List<MessageEntity> findByChatRoomIdOrderByIdDesc(Long chatRoomId, Pageable pageable);
+
+    // Messages older than the cursor (id), newest first
+    List<MessageEntity> findByChatRoomIdAndIdLessThanOrderByIdDesc(Long chatRoomId, Long beforeId, Pageable pageable);
 
     @Query("SELECT m FROM MessageEntity m WHERE m.chatRoom.id = :roomId AND LOWER(m.content) LIKE LOWER(CONCAT('%', :query, '%')) ORDER BY m.sentAt ASC")
     List<MessageEntity> searchByRoomAndContent(@Param("roomId") Long roomId, @Param("query") String query);

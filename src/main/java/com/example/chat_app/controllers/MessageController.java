@@ -30,8 +30,11 @@ public class MessageController {
     }
 
     @GetMapping("/{roomId}/messages")
-    public ResponseEntity<List<MessageItemDTO>> getByRoom(@PathVariable Long roomId) {
-        return ResponseEntity.ok(messageService.getByRoom(roomId));
+    public ResponseEntity<List<MessageItemDTO>> getByRoom(
+            @PathVariable Long roomId,
+            @RequestParam(required = false) Long before,
+            @RequestParam(defaultValue = "30") int limit) {
+        return ResponseEntity.ok(messageService.getPage(roomId, before, limit));
     }
 
     @PostMapping("/{roomId}/read")

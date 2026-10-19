@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -189,5 +190,29 @@ class MessageServiceTest {
         MessageItemDTO result = messageService.togglePin(1L, 1L);
 
         assertThat(result.isPinned()).isFalse();
+    }
+
+    @Test
+    void getPage_returnsOldestToNewest() {
+        MessageEntity m1 = msg(1L), m2 = msg(2L);
+        when(messageRepository.findByChatRoomIdOrderByIdDesc(eq(1L), any(Pageable.class)))
+                .thenReturn(List.of(m2, m1)); // repository returns newest first
+
+        List<MessageItemDTO> result = messageService.getPage(1L, null, 30);
+
+        assertEquals(List.of(1L, 2L), result.stream().map(MessageItemDTO::getId).toList());
+    }
+
+    private MessageEntity msg(Long id) {
+        UserEntity u = new UserEntity();
+        u.setUsername("alice");
+        ChatRoomEntity room = new ChatRoomEntity();
+        room.setId(1L);
+        MessageEntity m = new MessageEntity();
+        m.setId(id);
+        m.setSender(u);
+        m.setChatRoom(room);
+        m.setContent("hi " + id);
+        return m;
     }
 }
