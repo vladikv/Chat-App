@@ -1,0 +1,21 @@
+# Build output and VCS
+target/
+.git/
+.github/
+
+# Local runtime data and secrets
+uploads/
+.env
+*.log
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.mvn/wrapper/maven-wrapper.jar
+
+# Docs and compose files are not needed in the image
+*.md
+docker-compose*.yml
+Dockerfile
+.dockerignore
