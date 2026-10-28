@@ -386,11 +386,17 @@ async function createRoom() {
     const name = input.value.trim();
     if (!name) return;
 
-    await fetchWithAuth(BASE_URL + '/api/rooms', {
+    const res = await fetchWithAuth(BASE_URL + '/api/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name })
     });
+
+    if (!res.ok) {
+        console.error('Create room failed:', res.status, await res.text());
+        alert('Could not create the room (error ' + res.status + ').');
+        return;
+    }
 
     input.value = '';
     toggleNewRoom();

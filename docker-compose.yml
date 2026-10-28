@@ -1,35 +1,55 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:17
     environment:
-      POSTGRES_DB: chatapp
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: vladik123
+      POSTGRES_DB: ${POSTGRES_DB:-chatapp}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
-      - "5433:5432"
+      - "${DB_PORT:-5433}:5432"   # host access for development; remove in production
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-chatapp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"   # host access for development; remove in production
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
 
   app:
     build: .
     ports:
-      - "8081:8081"
+      - "${APP_PORT:-8081}:8081"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/chatapp
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: vladik123
-      SPRING_REDIS_HOST: redis
-      SPRING_REDIS_PORT: 6379
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-chatapp}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      # Spring Boot 3 uses spring.data.redis.* (the old spring.redis.* is ignored)
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      APP_JWT_SECRET: ${APP_JWT_SECRET:?Set APP_JWT_SECRET in .env}
+      APP_JWT_EXPIRATION: ${APP_JWT_EXPIRATION:-900000}
+      APP_JWT_REFRESH_EXPIRATION: ${APP_JWT_REFRESH_EXPIRATION:-604800000}
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+  uploads_data:
