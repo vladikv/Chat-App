@@ -464,7 +464,7 @@ function openRoom(roomId, roomName, el) {
     fetchWithAuth(BASE_URL + `/api/rooms/${roomId}/read`, { method: 'POST' });
     updateUnreadBadges({ [roomId]: 0 });
 
-    loadInitialMessages(roomId);
+    loadInitialMessages(getChatContext());
 
     currentSubscription = stompClient.subscribe(`/topic/room.${roomId}`, function (msg) {
         addMessage(JSON.parse(msg.body));
@@ -554,6 +554,7 @@ function addMessage(msg, opts = {}) {
 
     // opts.container: render into a detached element (used when prepending older history)
     const chat = opts.container || document.getElementById('chat');
+    const wasNearBottom = isNearBottom(chat);
     const isMe = msg.senderUsername === ME;
     const color = getUserColor(msg.senderUsername);
     const reactionsHTML = buildReactionsHTML(msg);
@@ -656,18 +657,44 @@ function addMessage(msg, opts = {}) {
 
     if (msg.senderUsername !== ME && !opts.container) playNotificationSound();
     chat.appendChild(div);
-    if (!opts.container) chat.scrollTop = chat.scrollHeight;
+    if (!opts.container) afterAppend(chat, wasNearBottom, isMe);
 }
 
-// ---------- Message history pagination (rooms) ----------
+// ---------- Message history pagination (rooms + DMs) ----------
 const PAGE_SIZE = 30;
 let hasMoreMessages = false;
 let loadingOlder = false;
 
-async function fetchMessagePage(roomId, beforeId) {
+// Describes the conversation that is currently open (room or DM), or null
+function getChatContext() {
+    if (currentRoomId) {
+        return {
+            key: 'room:' + currentRoomId,
+            url: `/api/rooms/${currentRoomId}/messages`,
+            idPrefix: 'msg-',
+            render: addMessage
+        };
+    }
+    if (currentDMUser) {
+        return {
+            key: 'dm:' + currentDMUser,
+            url: `/api/dm/${encodeURIComponent(currentDMUser)}`,
+            idPrefix: 'dm-msg-',
+            render: addDMMessage
+        };
+    }
+    return null;
+}
+
+function isStillOpen(ctx) {
+    const now = getChatContext();
+    return !!now && now.key === ctx.key;
+}
+
+async function fetchMessagePage(ctx, beforeId) {
     const params = new URLSearchParams({ limit: PAGE_SIZE });
     if (beforeId) params.set('before', beforeId);
-    const r = await fetchWithAuth(BASE_URL + `/api/rooms/${roomId}/messages?${params}`);
+    const r = await fetchWithAuth(BASE_URL + `${ctx.url}?${params}`);
     if (!r.ok) {
         console.error('Failed to load messages:', r.status);
         return [];
@@ -675,64 +702,67 @@ async function fetchMessagePage(roomId, beforeId) {
     return r.json();
 }
 
-function getOldestLoadedId() {
+function getOldestLoadedId(ctx) {
     const first = document.querySelector('#chat .message');
-    return first ? Number(first.id.replace('msg-', '')) : null;
+    return first ? Number(first.id.slice(ctx.idPrefix.length)) : null;
 }
 
-async function loadInitialMessages(roomId) {
+async function loadInitialMessages(ctx) {
+    if (!ctx) return;
     hasMoreMessages = false;
     loadingOlder = true; // block the scroll handler until the first page is in
+    missedWhileAway = 0;
     try {
-        const batch = await fetchMessagePage(roomId, null);
-        if (roomId !== currentRoomId) return; // user switched rooms meanwhile
-        batch.forEach(m => addMessage(m));
+        const batch = await fetchMessagePage(ctx, null);
+        if (!isStillOpen(ctx)) return; // user switched conversations meanwhile
+        batch.forEach(m => ctx.render(m));
         hasMoreMessages = batch.length === PAGE_SIZE;
+        updateScrollButton();
     } catch (e) {
         console.error('Messages error:', e);
     } finally {
-        if (roomId === currentRoomId) loadingOlder = false;
+        if (isStillOpen(ctx)) loadingOlder = false;
     }
-    fillViewportIfShort(roomId);
+    fillViewportIfShort(ctx);
 }
 
 async function loadOlderMessages() {
-    if (loadingOlder || !hasMoreMessages || !currentRoomId) return;
-    const roomId = currentRoomId;
-    const beforeId = getOldestLoadedId();
+    const ctx = getChatContext();
+    if (!ctx || loadingOlder || !hasMoreMessages) return;
+    const beforeId = getOldestLoadedId(ctx);
     if (!beforeId) return;
 
     loadingOlder = true;
     try {
-        const batch = await fetchMessagePage(roomId, beforeId);
-        if (roomId !== currentRoomId) return;
-        if (batch.length) prependMessages(batch);
+        const batch = await fetchMessagePage(ctx, beforeId);
+        if (!isStillOpen(ctx)) return;
+        if (batch.length) prependMessages(batch, ctx);
         hasMoreMessages = batch.length === PAGE_SIZE;
     } catch (e) {
         console.error('Older messages error:', e);
     } finally {
-        if (roomId === currentRoomId) loadingOlder = false;
+        if (isStillOpen(ctx)) loadingOlder = false;
     }
-    fillViewportIfShort(roomId);
+    fillViewportIfShort(ctx);
 }
 
 // If the loaded messages don't fill the screen there is no scrollbar,
 // so the scroll handler would never fire - keep loading until it does.
-function fillViewportIfShort(roomId) {
+function fillViewportIfShort(ctx) {
     const chat = document.getElementById('chat');
-    if (roomId === currentRoomId && hasMoreMessages && chat.scrollHeight <= chat.clientHeight) {
+    if (isStillOpen(ctx) && hasMoreMessages && chat.scrollHeight <= chat.clientHeight) {
         loadOlderMessages();
     }
 }
 
-function prependMessages(messages) {
+function prependMessages(messages, ctx) {
     const chat = document.getElementById('chat');
 
     // Render the batch off-DOM so separators/avatars are computed within the batch
     const temp = document.createElement('div');
-    messages.forEach(m => addMessage(m, { container: temp }));
+    messages.forEach(m => ctx.render(m, { container: temp }));
 
-    // Boundary fix 1: drop the old first separator if it repeats the batch's last day
+    // Boundary fix 1 (rooms): drop the old first separator if it repeats the batch's last day
     const lastNew = temp.lastElementChild;
     let firstOld = chat.firstElementChild;
     if (firstOld && lastNew && firstOld.classList.contains('date-separator')
@@ -756,6 +786,79 @@ function prependMessages(messages) {
     chat.scrollTop = prevTop + (chat.scrollHeight - prevHeight);
 }
 
+// ---------- Scroll-to-bottom button ----------
+const NEAR_BOTTOM_PX = 150;
+let missedWhileAway = 0; // messages from others that arrived while the user was scrolled up
+let scrollBtn = null;
+let scrollBadge = null;
+
+function isNearBottom(el, threshold = NEAR_BOTTOM_PX) {
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+}
+
+// Called after a live message was appended: follow it only if the user was
+// already at the bottom (or wrote it); otherwise count it on the button.
+function afterAppend(chat, wasNearBottom, isMine) {
+    if (wasNearBottom || isMine) {
+        chat.scrollTop = chat.scrollHeight;
+        missedWhileAway = 0;
+    } else {
+        missedWhileAway++;
+    }
+    updateScrollButton();
+}
+
+function updateScrollButton() {
+    const chat = document.getElementById('chat');
+    if (!scrollBtn || !chat) return;
+
+    const rect = chat.getBoundingClientRect();
+    const show = rect.height > 0 && (!isNearBottom(chat) || missedWhileAway > 0);
+    scrollBtn.style.display = show ? 'flex' : 'none';
+    if (!show) return;
+
+    scrollBadge.textContent = missedWhileAway > 99 ? '99+' : String(missedWhileAway);
+    scrollBadge.style.display = missedWhileAway > 0 ? 'block' : 'none';
+
+    // Sit in the bottom-right corner of the chat area
+    scrollBtn.style.left = (rect.right - scrollBtn.offsetWidth - 16) + 'px';
+    scrollBtn.style.top = (rect.bottom - scrollBtn.offsetHeight - 16) + 'px';
+}
+
+function initScrollButton() {
+    const chat = document.getElementById('chat');
+    if (!chat) return;
+
+    scrollBtn = document.createElement('button');
+    scrollBtn.type = 'button';
+    scrollBtn.setAttribute('aria-label', 'Scroll to latest messages');
+    scrollBtn.textContent = '\u2193';
+    scrollBtn.style.cssText = 'position:fixed;display:none;align-items:center;justify-content:center;' +
+        'width:40px;height:40px;border-radius:50%;border:none;cursor:pointer;z-index:900;' +
+        'background:#007aff;color:#fff;font-size:20px;line-height:1;' +
+        'box-shadow:0 4px 14px rgba(0,0,0,.3);';
+
+    scrollBadge = document.createElement('span');
+    scrollBadge.style.cssText = 'position:absolute;top:-6px;right:-6px;min-width:18px;padding:0 5px;' +
+        'height:18px;line-height:18px;border-radius:9px;background:#e74c3c;color:#fff;' +
+        'font-size:11px;font-weight:600;text-align:center;display:none;';
+    scrollBtn.appendChild(scrollBadge);
+
+    scrollBtn.addEventListener('click', () => {
+        chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
+        missedWhileAway = 0;
+        updateScrollButton();
+    });
+    document.body.appendChild(scrollBtn);
+
+    chat.addEventListener('scroll', () => {
+        if (isNearBottom(chat)) missedWhileAway = 0;
+        updateScrollButton();
+    }, { passive: true });
+    window.addEventListener('resize', updateScrollButton);
+    if (window.ResizeObserver) new ResizeObserver(updateScrollButton).observe(chat);
+}
+
 function initPaginationScroll() {
     const chat = document.getElementById('chat');
     if (!chat) return;
@@ -763,10 +866,14 @@ function initPaginationScroll() {
         if (chat.scrollTop < 150) loadOlderMessages();
     });
 }
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initPaginationScroll);
-} else {
+function initChatScrollFeatures() {
     initPaginationScroll();
+    initScrollButton();
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initChatScrollFeatures);
+} else {
+    initChatScrollFeatures();
 }
 
 function updateOnlineUsers(users) {
@@ -1091,10 +1198,8 @@ function openDM(username) {
     dmUnread[username] = 0;
     updateDMBadges();
 
-    // Load history
-    fetchWithAuth(BASE_URL + `/api/dm/${username}`)
-        .then(r => r.json())
-        .then(messages => messages.forEach(addDMMessage));
+    // Load newest page of history
+    loadInitialMessages(getChatContext());
 
 
     if (window.innerWidth <= 600) {
@@ -1104,10 +1209,12 @@ function openDM(username) {
     }
 }
 
-function addDMMessage(msg) {
+function addDMMessage(msg, opts = {}) {
     if (!currentDMUser) return;
 
-    const chat = document.getElementById('chat');
+    // opts.container: render into a detached element (used when prepending older history)
+    const chat = opts.container || document.getElementById('chat');
+    const wasNearBottom = isNearBottom(chat);
     const isMe = msg.senderUsername === ME;
     const color = getUserColor(msg.senderUsername);
     const div = document.createElement('div');
@@ -1160,7 +1267,7 @@ function addDMMessage(msg) {
     div.dataset.sender = msg.senderUsername;
 
     chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
+    if (!opts.container) afterAppend(chat, wasNearBottom, isMe);
 }
 
 function switchTab(tab) {
