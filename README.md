@@ -1,7 +1,25 @@
 # 💬 Chat App
 
 [![CI](https://github.com/vladikv/Chat-App/actions/workflows/ci.yml/badge.svg)](https://github.com/vladikv/Chat-App/actions/workflows/ci.yml)
+![Java](https://img.shields.io/badge/Java-21-orange?style=flat-square&logo=java)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5-green?style=flat-square&logo=springboot)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue?style=flat-square&logo=postgresql)
+![Docker](https://img.shields.io/badge/Docker-ready-blue?style=flat-square&logo=docker)
 
+---
+
+## ✨ Features
+
+- 🔐 JWT Authentication (register / login)
+- 💬 Real-time messaging via WebSocket + STOMP
+- 🏠 Multiple chat rooms with rename support (creator only)
+- 👥 Online/offline members list with live status updates
+- ✏️ Edit & delete messages in real-time
+- ⌨️ Typing indicator
+- 🌙 Dark / Light theme toggle
+- 👤 User profile page (edit username, email, password)
+- 📱 Mobile-friendly with responsive layout
+- 🐳 Docker + Docker Compose support
 A full-featured real-time chat application built with **Java Spring Boot** and **WebSocket**, featuring a modern responsive frontend.
 
 ---
