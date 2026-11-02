@@ -166,11 +166,18 @@ function onStompConnected() {
         const otherUser = data.senderUsername === ME ? data.receiverUsername : data.senderUsername;
         if (otherUser === currentDMUser) {
             addDMMessage(data);
+            if (data.senderUsername !== ME) clearTypingIndicator();
         } else if (data.senderUsername !== ME) {
             dmUnread[otherUser] = (dmUnread[otherUser] || 0) + 1;
             updateDMBadges();
             playNotificationSound();
         }
+    });
+
+    // Someone is typing to me in a DM
+    stompClient.subscribe(`/topic/dm.typing.${ME}`, function(msg) {
+        const sender = msg.body.replace(/"/g, '');
+        if (!currentRoomId && sender === currentDMUser) showTyping(sender);
     });
 
     setTimeout(() => {
@@ -935,12 +942,25 @@ function showTyping(username) {
     }, 2000);
 }
 
+function clearTypingIndicator() {
+    clearTimeout(typingTimeout);
+    document.getElementById('typing-indicator').innerHTML = '';
+}
+
 let typingSent = false;
 
+// Tell the other side that I'm typing (rooms: everyone in the room, DMs: the receiver).
+// Throttled to one signal per 1.5 s.
 function notifyTyping() {
-    if (typingSent || !currentRoomId) return;
+    if (typingSent) return;
+
+    let destination = null;
+    if (currentRoomId) destination = `/app/typing/${currentRoomId}`;
+    else if (currentDMUser) destination = `/app/dm.typing/${currentDMUser}`;
+    if (!destination) return;
+
     typingSent = true;
-    stompClient.send(`/app/typing/${currentRoomId}`, {}, '');
+    stompClient.send(destination, {}, '');
     setTimeout(() => { typingSent = false; }, 1500);
 }
 
