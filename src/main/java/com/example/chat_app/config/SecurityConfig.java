@@ -10,7 +10,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.access.channel.ChannelProcessingFilter;
 
 import java.util.Optional;
 
@@ -44,9 +43,10 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
-        // Add rate limit filter only when available (disabled in test profile)
+        // Add rate limit filter only when available (disabled in test profile).
+        // It runs after JwtAuthFilter so limits can be keyed by authenticated user.
         rateLimitFilter.ifPresent(filter ->
-                http.addFilterBefore(filter, ChannelProcessingFilter.class));
+                http.addFilterAfter(filter, JwtAuthFilter.class));
 
         return http.build();
     }
